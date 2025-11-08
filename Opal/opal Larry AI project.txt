@@ -1,0 +1,1408 @@
+youtube automation.
+
+What must it do? 
+Larry, Larry will do tasks based of youtube automation, examples:
+Larry AI — YouTube Automation Assistant (spec)
+Short summary
+
+Larry AI is an automation agent for YouTube channels that:
+
+Researches what’s trending (topics, charts, related tags, short-form trends).
+
+Plans content (shorts, long form, repurposed clips).
+
+Creates scripts, voiceovers (TTS), captions, thumbnails, and short vertical videos using Gemini as the primary LLM / multimodal engine.
+
+Optimizes metadata (titles, descriptions, tags, hashtags) using live trend signals.
+
+Uploads & tests variants automatically, collects analytics, and refines strategy.
+
+Larry is explicitly configured to be token-economic: it uses light prompts, reuses cached assets, batches calls, and delegates heavy-lift media generation to specialized Gemini endpoints (text2speech / video tools) rather than brute-force long LLM prompts.
+
+Core Principles
+
+Gemini-first — every text, TTS, and video pipeline uses Gemini for cost+quality tradeoffs.
+
+Always-updating trend inputs — Larry continuously or on-schedule checks trending charts, top searches, and hashtag behavior (see “Trend pipeline”).
+
+Shorts-first strategy — focus on Shorts (high velocity, high potential) while recycling best Shorts into long-form content.
+
+Ethical & compliant — avoid deceptive metadata / irrelevant hashtags (YouTube can penalize). Larry flags risky metadata before upload.
+
+Economy-minded — cache outputs (audio, thumbnails, embeddings), use low-temp drafts for routine edits, and only call higher-cost endpoints for final creative passes.
+
+High-level feature list
+1) Research & discovery
+
+Periodic scraping / API checks for:
+
+YouTube Trending page (regional), Top Charts, Google Trends, Twitter/X trends, TikTok trending, Reddit r/videos/r/shorts.
+
+Recent popular audio / meme references (e.g., "d4vd" style trends).
+
+Emerging nonsense / micro-hashtags (detect sudden spikes).
+
+Outputs:
+
+Top N topic suggestions with estimated search volume & intent.
+
+Suggested keywords, candidate hashtags, and tags with risk score (relevance vs. algorithm gaming).
+
+Channel-tailored opportunities (gaps in niche, low-competition keywords).
+
+2) Idea-to-brief pipeline
+
+Generate content brief: hook, 3-act structure for short, CTA, thumbnail idea.
+
+Provide a time-coded shot list (for creators) and a short cut list (for automated editor).
+
+Produce 2–4 variations (A/B) with different hooks for A/B testing.
+
+3) Script & short copy creation
+
+Generate short-form scripts (10–60s) and long-form outlines using minimal prompt tokens:
+
+Use bullet outliner + small expansions (economical).
+
+Auto-create description, pinned comment, chapters, translation seeds.
+
+4) TTS / Voice + audio pipeline (Gemini)
+
+Use Gemini TTS for voiceover generation. Configurable:
+
+voice selection, speech rate, pitch, SSML for emphasis.
+
+Cache audio clips; reuse same audio for re-renders or language variants.
+
+Economize by generating speech for final draft only; use text for previews.
+
+5) Video creation & editing (Gemini + lightweight compositor)
+
+Use Gemini’s video-generation or script-to-video features where available (templates for Shorts).
+
+For efficiency: create animated text + stock footage + TTS rather than full synthetic actors.
+
+Auto-size outputs for:
+
+Shorts: 9:16, <60s
+
+Long-form: 16:9 with repurposed segments
+
+Auto-captioning, subtitles, and translated captions.
+
+6) Thumbnail automation
+
+Gemini & simple image-layout templates produce 3 thumbnail variants:
+
+Clean text + face emoji / dramatic element + high contrast.
+
+Auto-A/B test thumbnails on small audience sample (if available).
+
+7) Metadata & upload
+
+Title templates with dynamic tokens (hook + primary keyword + bracket).
+
+Description templates with chapters, 3 hashtags (max 3–5 recommended), and relevant links.
+
+Tag recommendations (short list, prioritized).
+
+Hashtag risk scoring (flag “nonsense” hashtags that are irrelevant or likely to be penalized).
+
+8) Monitoring & learning loop
+
+Pull YouTube Analytics after upload:
+
+CTR, 1–7 day retention, traffic sources, impressions, watch time.
+
+Automatically tweak:
+
+Thumbnail, title, long/short description, tags; or reupload variant if needed.
+
+Maintain a repository of best-performing templates and prompts.
+
+Trend detection pipeline (how Larry stays “always updating”)
+
+Data sources: YouTube Trending API / scraping (region-specific), Google Trends, Top Charts, social listening (X, TikTok, Reddit), and audio platforms.
+
+Frequency: configurable (hourly for Shorts ops, daily for long-form ops).
+
+Spike detection: rolling z-score on search volume and social mentions to detect emerging micro-hashtags.
+
+Tag / hashtag classifier:
+
+Relevance score = semantic similarity(video-topic, hashtag) + historical conversion (views→retention).
+
+Risk score = mismatch between hashtag meaning and video content + history of policy takedowns.
+
+Output: daily trending feed (short list) and immediate alerts for sudden micro-trends. Store trend history for organic signal detection.
+
+Important: Larry surfaces candidate trending hashtags — but will not recommend irrelevant/nonsensical hashtags as primary metadata. It flags them and provides a compliance warning and the performance pros/cons.
+
+Why “nonsense” hashtags are risky (what Larry enforces)
+
+Nonsense hashtags can produce short spikes but harm retention and are policy-risky.
+
+Larry provides: example list of currently-observed nonsense hashtags and their risk levels (keeps this list dynamic).
+
+Default behavior: suggest relevant hashtags, limit to 3–5, and only include one experimental hashtag at a time for tests. If experimental, mark the video as test and monitor closely.
+
+Token- and cost-saving tactics (practical)
+
+Two-stage prompts: short prompts to produce outlines; only expand chosen outline into full script.
+
+Cache and reuse: store reusable outputs (intros, outros, CTAs, voice packs, audio segments).
+
+Local assembly: use small Gemini calls for assets and do assembly in your own worker (cheaper than large monolithic calls).
+
+Low-temp drafts for brainstorming; higher-temp only for final creative pass.
+
+Batch requests: batch TTS generation for multiple variants in one job where supported.
+
+Prompt templates with variables (reduce prompt length).
+
+Embeddings for tags: compute embeddings once per trend window and reuse.
+
+Compliance, safety, and best practices
+
+Larry has a built-in policy guard:
+
+Flags misleading metadata (irrelevant tags/hashtags).
+
+Warns about copyrighted audio or risky usage.
+
+Recommends attribution and fair use checks.
+
+For region-sensitive content, Larry will surface local YouTube rules and policy excerpts (automated refresher).
+
+Example workflows (concrete)
+Workflow A — Shorts rapid (ideal for high-volume)
+
+Trend detector finds micro-trend T.
+
+Larry creates 3 short hooks (5–8 words).
+
+Select best hook (auto-rank by predicted CTR using historical dataset) → generate 40–50s script.
+
+Gemini TTS audio generation (selected voice, SSML).
+
+Auto-assemble vertical clip: animated captions + stock b-roll + TTS.
+
+Create 3 thumbnail variants.
+
+Upload as “experiment” with metadata:
+
+Title: [Hook] — {keyword}
+
+Description: short summary + 2–3 relevant hashtags (Larry will not include irrelevant nonsense hashtags unless explicitly requested for test).
+
+Monitor 24–72 hours; if CTR/retention good → scale.
+
+Workflow B — Long-form (repurpose best Shorts)
+
+Take 3 top-performing Shorts.
+
+Have Larry produce a 8–12 minute long-form outline linking them with depth.
+
+Gemini produces voice segments; human or editor adds richer B-roll.
+
+Upload, add chapters, long description, and localized subtitles.
+
+Prompts & templates (economical examples for Gemini use)
+Short prompt (outline generation — cheap)
+System: You are a concise YouTube shorts outline assistant.
+User: Topic: {topic}
+Constraints: 40-55 seconds, hook in first 3s, 3 beat structure, include one surprising fact, end with CTA.
+Output: bullet outline with 6–10 lines (hook, beat1, beat2, payoff, CTA), <50 tokens.
+
+Final script prompt (after outline selected)
+System: Expand the chosen outline into a 40s short script for voiceover with natural phrasing, 1–2 short sentences per beat, include SSML tags for emphasis.
+User: [include chosen outline here]
+
+TTS prompt example (SSML guidance)
+
+Insert brief SSML instructions for emphasis: <break time="200ms"/>, <emphasis level="moderate">, etc.
+
+Use lower audio bitrate only if target platform accepts it (to save cost).
+
+Metadata policy & sample rules
+
+Titles: max 70 characters, include primary keyword early.
+
+Hashtags: max 3–5; prioritize relevance; experimental nonsense hashtag allowed only if labeled #experiment and monitored.
+
+Description: first 150 chars must be hook + link; include chapters and primary keyword in first 200 chars.
+
+Tags: 8–12 tags max; include 3 specific, 2 mid-tail, 2 broad.
+
+Example decision rules for nonsense hashtags
+
+If a hashtag’s relevance score < 0.3 and risk score > 0.4, label: HIGH-RISK: potential algorithm gaming.
+
+If experimentation requested, require experiment flag; automatically lower monetization/ads recommendation until stable.
+
+Metrics & KPIs Larry tracks
+
+Short-term: impressions, CTR, first 15s retention, likes, shares.
+
+Mid-term: 7-day watch time, subscriber conversion, average view duration per video.
+
+Long-term: audience growth rate, traffic source diversification.
+
+Implementation notes (tech stack + integrations)
+
+APIs: YouTube Data API (upload + analytics), Google Trends, Gemini endpoints (TTS, text2video if available), optional social APIs (X/TikTok).
+
+Storage: S3/Cloud storage for cached audio/video assets and thumbnail variants.
+
+Orchestration: serverless functions + cron scheduler (e.g., Cloud Tasks / Cloud Functions) or self-hosted cron.
+
+Dashboard: show trending signals, queued jobs, performance, experiment outcomes.
+
+Secrets: store API keys securely; rotate.
+
+Sample config (YAML) — what you can tweak
+larry_config:
+  region: "global"                # primary market
+  trend_check_interval: "6h"      # how often to poll trends (shorts ops: 1h-3h)
+  shorts_target_length: 40
+  max_daily_shorts: 5
+  hashtag_policy:
+    max_hashtags: 5
+    experimental_allowed: true
+    experimental_label_required: true
+  gemini:
+    tts_voice: "emma_v2"
+    tts_quality: "economy"        # options: economy | standard | high
+    text_model: "gemini-small"
+    creative_model: "gemini-creative"
+  cache:
+    audio_ttl_days: 30
+    thumbnail_ttl_days: 60
+
+Real-world example (concise)
+
+Input trend: fast-rising meme audio + search spike for "d4vd"
+
+Larry -> suggests 3 short hooks referencing the audio, creates scripts, generates TTS using Gemini economy voice, auto-assembles 3 Shorts with localized captions, uploads with one relevant hashtag + one experimental trending hashtag (flagged), monitors first 48 hours and either scales or pauses.
+
+Human-in-loop & guardrails
+
+Human approval for: brand-sensitive uploads, monetization-sensitive content, or any flagged metadata.
+
+Larry provides one-click override: replace recommended hashtags, change thumbnails, or abort scheduled upload.
+
+Final notes & recommendations
+
+Don’t rely on nonsense hashtags for sustainable growth. Use them only for monitored experiments. Larry enforces this by default.
+
+Use Gemini strategically: let it handle TTS, variant generation, translations, and rough video comps; keep final creative passes human-supervised for channel quality.
+
+Measure quickly and iterate: Shorts require rapid experiments; use the (economical) two-stage prompt pattern to keep costs low.
+
+Ready-to-copy intro paragraph (you can paste into docs / pitch)
+
+Larry AI is a Gemini-powered automation assistant for YouTube that discovers the hottest trends, writes short-form and long-form scripts, produces TTS voiceovers and quick video edits, generates thumbnails, optimizes metadata, and uploads versions for A/B testing — all while prioritizing token economy, compliance with YouTube policies, and continuous trend updating. Larry makes Shorts the default growth channel, repurposes winners into longer videos, and keeps a strict “no deceptive metadata” guardrail while allowing monitored experiments for research.
+1 — One-page Quickstart checklist
+
+Infrastructure
+
+Obtain API keys: YouTube Data API, Gemini (text + TTS + video if available), Google Trends (or use scraping fallback), optional X/TikTok API keys.
+
+Setup secure secrets storage (Vault / cloud secret manager).
+
+Provision storage (S3 / GCS) and a small DB (Postgres / Dynamo) for metadata and experiment state.
+
+Create service account with upload and analytics read permissions for YouTube.
+
+Deploy core services (serverless recommended)
+
+Trend detector cron job (hourly or 3-hourly for shorts).
+
+Job queue / worker pool for content generation (audio/video).
+
+Upload worker that signs and uploads to YouTube via YouTube Data API.
+
+Dashboard service (simple React + serverless API) for KPIs and review.
+
+Initial config
+
+Region targets, gemini voice selection, short length target, max daily shorts.
+
+Enable experimental_allowed:true only if you want to test micro-hashtags.
+
+Run first experiment
+
+Start trend detector → pick top micro-trend → generate 3 shorts → upload as experiment → monitor 48 hours.
+
+Human review
+
+Approve or reject flagged metadata before monetized uploads.
+
+Iterate
+
+Promote winners into long-form repurposing flow.
+
+2 — Gemini prompt templates (token-economic & ready)
+
+Use two-stage flow: Outline → Final script → TTS. Keep prompts short, reuse templates, and pass variables only.
+
+A. Outline generator (very short)
+
+System prompt (singleton):
+
+System: You are a concise YouTube Shorts outline assistant. Return exactly one bullet outline. Use <= 40 tokens.
+
+
+User prompt:
+
+Topic: {topic}
+Language: {lang}
+LengthSec: {length}  # 25-50
+Constraints: hook in 0-3s; surprising fact; CTA at end; 3-beat structure.
+OutputFormat: 1-line bullets: HOOK | BEAT1 | BEAT2 | PAYOFF | CTA
+
+B. Short script (expand selected outline; economical)
+
+System:
+
+System: Expand the outline into a natural 40–55s spoken script. Use short lines (1-2 sentences). Include SSML tags for 200ms breaks where necessary. Keep it under 120 tokens.
+
+
+User:
+
+Outline: {chosen_outline}
+Tone: punchy, conversational
+Output: Plain text script ready for TTS with SSML.
+
+C. Thumbnail copy / headline (cheap)
+
+System:
+
+System: Provide 3 headline variants, each <= 8 words, optimized for CTR. Return JSON array.
+
+
+User:
+
+Context: {hook} TargetAudience: {audience}
+
+D. Description + tags generator (cheap)
+
+System:
+
+System: Produce a short description (<= 150 chars), 3 hashtags (relevant), and 8 tags (comma-separated). Prioritize relevance.
+
+
+User:
+
+Title: {title} Topic: {topic} PrimaryKeyword: {keyword}
+
+E. Hashtag risk check (cheap classifier)
+
+System:
+
+System: Given video topic and candidate hashtags, return each hashtag with {relevance:0-1, risk:0-1} and a one-sentence justification. Use <= 60 tokens.
+
+
+User:
+
+Topic: {topic}
+CandidateHashtags: {list}
+
+F. TTS call (Gemini TTS config payload, small)
+
+Use small SSML wrapper around the script. Example payload:
+
+<speak>
+  <prosody rate="medium" pitch="medium">
+    {script_text}
+  </prosody>
+</speak>
+
+
+Gemini params: voice=emma_v2, quality=economy (change to standard for final pass). Batch TTS for up to 5 variants in one request if endpoint allows.
+
+3 — Serverless pseudocode: trend → gen → upload
+
+This is intentionally language-agnostic pseudocode you can adapt to Node/Python.
+
+# trend_worker (cron)
+def trend_worker():
+    trends = fetch_trends()   # YouTube trending + GoogleTrends + social spikes
+    spikes = detect_spikes(trends)  # z-score, recent-volume
+    for spike in spikes.top_n(10):
+        enqueue_job("generate_experiment", {"trend": spike})
+
+# generate_experiment (worker)
+def generate_experiment(payload):
+    trend = payload["trend"]
+    # 1) brief generation (cheap)
+    outline = call_gemini_outline(trend.topic)
+    variants = expand_to_variants(outline)  # small transform, <=3
+    # 2) quick risk check for hashtags
+    tags_and_hashes = call_gemini_tags(variants[0])
+    if has_high_risk(tags_and_hashes):
+        flag_for_review(payload, reason="hashtag-risk")
+        # optionally continue with safe tags only
+    # 3) generate final short script for chosen variant
+    chosen = rank_variants(variants)  # use small model or heuristic
+    script = call_gemini_script(chosen)
+    # 4) TTS (batch if multiple variants)
+    tts_audio = gemini_tts(script, voice="economy")
+    # 5) assemble video (local compositor)
+    video = assemble_short(tts_audio, script, trend.stock_broll, captions=True)
+    # 6) thumbnail gen
+    thumbs = gemini_thumbnail(chosen.headline)
+    # 7) store assets
+    store_assets([video, tts_audio] , path=asset_path(trend, uuid()))
+    # 8) upload (mark experiment, include metadata)
+    upload_payload = {
+        title: format_title(chosen.hook, trend.keyword),
+        description: format_description(chosen, trend),
+        tags: select_safe_tags(tags_and_hashes),
+        thumbnails: thumbs[0],
+        privacyStatus: "public" if auto_publish else "private",
+        experiment_flag: True
+    }
+    result = youtube_upload(video, upload_payload)
+    log_experiment(result, metrics=initial_metadata)
+
+
+Error handling: retry transient API errors 3x with exponential backoff. If metadata flagged as high-risk, pause upload unless force=true.
+
+4 — Storage & file layout (example)
+/assets/
+  /raw_audio/{date}/{video_id}.mp3
+  /videos/shorts/{date}/{video_id}.mp4
+  /thumbnails/{date}/{video_id}.png
+/datastore/
+  experiments.csv or experiments table
+  trends_history/
+logs/
+
+5 — Example YAML config (drop-in)
+larry_config:
+  region: global
+  trend_check_interval_hours: 3
+  max_daily_shorts: 6
+  shorts_target_length_sec: 40
+  gemini:
+    text_model: gemini-small
+    creative_model: gemini-creative
+    tts_voice: "emma_v2"
+    tts_quality: "economy"
+  upload:
+    auto_publish_experiments: false
+    default_privacy: private
+  hashtag_policy:
+    max_hashtags: 5
+    experimental_label_required: true
+    experimental_quota_per_day: 2
+  monitoring:
+    alert_on_spike_failure: true
+    alert_on_upload_failure: true
+
+6 — A/B test & decision rules (practical)
+
+A/B test window: 48 hours for Shorts.
+
+Success criteria (promote to scaling if any True):
+
+CTR > channel_median_CTR * 1.25 AND median_watch_15s > 0.6
+
+or 24h views > channel_median_24h_views * 1.5
+
+Kill criteria (stop and mark as failed):
+
+CTR < 0.6 * channel_median_CTR OR retention < 0.3 in first 15s.
+
+When promoted:
+
+Generate 4 variants (new thumbnails/titles) and increase ad budget (if monetized).
+
+Logging: store decision rationale + metrics.
+
+7 — Monitoring & alerts (practical)
+
+Dashboard panels:
+
+Trending feed (top 20 spikes): name, z-score, region, timestamp
+
+Upload queue: queued / processing / failed
+
+Experiments: video_id, CTR, 15s retention, 24h views, decision status
+
+Alerts:
+
+Upload failure > 2 retries → Slack + email
+
+Spike worker runtime error → PagerDuty
+
+Experiment flagged for policy risk → notify human reviewer immediately
+
+Retention watchers: if a video has CTR > 2x but < 12% retention → auto-flag as “misleading” for review.
+
+8 — Cost-saving knobs (summary)
+
+Use gemini-small for outlines & tags; only use creative for final scripts / thumbnail text.
+
+Economy TTS quality for drafts; generate standard only for final winners.
+
+Batch TTS and batch uploads where API supports.
+
+Cache embeddings & trend computations for 24–72 hours.
+
+Local assembly of clips instead of calling high-cost end-to-end video generation for each variant.
+
+9 — Safety & compliance built in
+
+Always-apply hashtag_risk_checker before upload.
+
+Add built-in rate-limiter for experimental nonsense hashtags (e.g., max 2 experiments/day).
+
+Require human approval for monetized content or flagged experiments.
+
+Keep a rolling list of banned or high-risk tags; automatically downgrades monetization suggestions for flagged videos.
+
+10 — Example quick testing plan (first 14 days)
+
+Day 0–1: Deploy trend detector + a single generate_experiment worker. Test with 1 region and auto_publish:false.
+
+Day 2–4: Run 5 experiments; check that risk-checker flags nonsense hashtags and assets store correctly.
+
+Day 5–7: Enable auto-publish for non-flagged experiments. Run up to 3/day.
+
+Day 8–14: Start promoting winners into long-form workflow and begin A/B thumbnail tests.
+
+11 — Example short script + metadata (final demo)
+
+Hook: “This sound melted my brain in 3s — here’s why.”
+
+Script (SSML):
+
+<speak>
+  <prosody rate="medium">
+    <break time="200ms"/>
+    This short sound went viral because it tricks your ears — here's the simple reason. <break time="300ms"/>
+    Scientists call it auditory contrast — when your brain expects one thing and gets another, it pays attention. <break time="250ms"/>
+    Try this experiment now and tell me in the comments.
+  </prosody>
+</speak>
+
+
+Title: “Why this 3s sound hooks you — auditory trick”
+
+Hashtags: #AudioHack #Shorts #Experiment (no nonsense tags)
+
+Tags: auditory trick, short audio experiment, viral sound, brain hack, d4vd (only if relevant)
+
+If you want, next I’ll:
+
+generate a ready-to-run Node.js or Python serverless template (full file) for the trend detector + job queue + upload worker, or
+
+produce a tiny React dashboard UI (one-file) to review experiments and approve flagged uploads, or
+
+run a simulated 7-day experiment plan (example outputs & expected metrics) so you can see the decision thresholds play out.
+make the workflow of the yk full thing and also like the upload and like confirmation and like stats and recheckups etc.
+
+# Larry AI — Full Operational Workflow
+
+This document describes the **end-to-end workflow** for Larry AI: from trend detection through content generation, upload, confirmation, automatic monitoring, rechecks, and human-in-loop actions. It is designed to be actionable and implementation-ready.
+
+---
+
+## Table of contents
+
+1. Overview
+2. Components and responsibilities
+3. High-level sequence flow (summary)
+4. Detailed stage-by-stage workflow
+
+   * Trend Detector
+   * Generation Worker
+   * Upload Worker
+   * Confirmation & Notification
+   * Monitoring & Rechecks (automated)
+   * Promotion / Kill / Reupload logic
+   * Human review & overrides
+5. State machine (video lifecycle)
+6. Webhooks & events
+7. Database schema (minimal)
+8. Pseudocode for critical workers
+
+   * Trend worker
+   * Generate worker
+   * Upload worker
+   * Recheck worker
+9. Retry, backoff, and error handling
+10. Decision thresholds and KPIs
+11. Dashboard & UI flows (operator perspective)
+12. Security & compliance notes
+13. Appendix: sample API payloads and templates
+
+---
+
+# 1. Overview
+
+Larry AI automates content creation and publishing with safety gates and continuous monitoring. The lifecycle of a single video (experiment) follows these phases:
+
+* **Detect** trending signal → **Generate** outline/scripts/TT S/video + thumbnails → **Risk-check** metadata & flag as necessary → **Upload** to YouTube (or stage for human approval) → **Confirm** result and notify stakeholders → **Monitor** analytics at preset intervals → **Recheck** decisions (promote/kill/reupload) → **Archive / Repurpose** winners into long-form workflows.
+
+# 2. Components and responsibilities
+
+* **Trend Detector**: polls data sources (YouTube Trending, Google Trends, social feeds), produces spike list and enqueues generation jobs.
+* **Job Queue + Worker Pool**: scalable workers that run `generate_experiment`, `upload_experiment`, and `recheck` jobs.
+* **Gemini Services**: TTS, text generation, thumbnail text, and optional video-generation endpoints.
+* **Local Compositor**: lightweight media assembly pipeline to combine TTS with stock B-roll and captions.
+* **YouTube Upload Worker**: handles uploads via YouTube Data API, maintains metadata, thumbnails, titles, tags and privacy state.
+* **Monitoring Service / Recheck Worker**: polls YouTube Analytics (or receives push via Pub/Sub) and re-evaluates decisions.
+* **Dashboard / Human Review UI**: shows queue, flagged items, experiment performance, and allows overrides.
+* **Storage & DB**: object storage for assets, DB for experiment state & metrics.
+* **Alerting**: Slack/Email/PagerDuty for failures, policy flags, or human review requests.
+
+# 3. High-level sequence flow
+
+1. Trend Detector finds spike S -> enqueue `generate_experiment`(S)
+2. Generate worker requests outlines from Gemini -> expands to script -> TTS -> assemble video -> produce thumbnails & metadata
+3. Hashtag/metadata risk-check runs: if HIGH -> mark `flagged` and send to human review (or continue with safe tags only if autoallowed)
+4. Upload worker picks a ready experiment -> if `auto_publish=false` -> create `private` upload and notify human; else upload `public` as experiment variant
+5. On successful upload -> persist video_id, set state `uploaded`, send confirmation notifications
+6. Recheck worker runs at 15m, 24h, 48h, 7d intervals → fetch analytics → compute KPIs → decide: `promote` / `kill` / `hold` / `reupload`
+7. If `promote` -> auto-create scale job (new thumbnails, titles, additional pockets of metadata) or move to long-form repurposing
+8. If `kill` -> unlist/privatize or delete; record reason
+9. Archive assets & metrics once lifecycle ends
+
+# 4. Detailed stage-by-stage workflow
+
+## A. Trend Detector
+
+* **Inputs**: YouTube Trending (region), Google Trends API, X/TikTok trending endpoints, internal channel performance.
+* **Process**:
+
+  1. Fetch latest top terms and audio spikes.
+  2. Compute z-score over historical windows (e.g., 7-day baseline) to detect anomalies/spikes.
+  3. Rank by z-score * regional weight * relevance to channel vertical.
+  4. Enqueue top N candidates as `generate_experiment` jobs.
+* **Output**: payload `{ trend_id, topic, keywords[], region, sample_audio_id, timestamp }`
+
+## B. Generation Worker (`generate_experiment`)
+
+* **Input**: Trend payload.
+* **Process**:
+
+  1. Generate 2–4 short outline variants (gemini-small).
+  2. Run cheap ranking heuristics (predicted CTR) to pick 2 variants for full expansion.
+  3. Expand chosen outline(s) to full script(s) (gemini-creative for final one).
+  4. Run `hashtag_risk_check`(topic, candidateHashtags).
+
+     * If `risk>threshold` and `experimental_allowed=false`: replace with safe tags and add note.
+     * If `risk>threshold` and `experimental_allowed=true`: mark `flagged` for human review and continue only if `force_experiment=true`.
+  5. TTS generation (batch if multiple variants). Generate economy voice for drafts; use `standard` for final.
+  6. Assemble video: overlay captions, apply stock B-roll, create 9:16 short and 16:9 repurpose clip.
+  7. Generate 3 thumbnail variants (gemini thumbnail/text + template layout locally).
+  8. Persist assets to storage and create DB record (state=`ready_for_upload`).
+  9. Enqueue `upload_experiment` job.
+* **Output**: `experiment_id`, `asset_paths`, `metadata_recommendation` (title, description, tags, hashtags), `risk_flags`.
+
+## C. Upload Worker (`upload_experiment`)
+
+* **Input**: Experiment record (assets + metadata)
+
+* **Pre-checks**:
+
+  * Verify asset presence in storage.
+  * Confirm risk flags: if `flagged` and `require_human=true` -> set state `awaiting_human` and send review request.
+  * If `auto_publish=false` -> set `privacy=private` and proceed to upload; notify reviewer.
+
+* **Upload process** (YouTube Data API):
+
+  1. Create upload session and send video file (multipart/resumable upload).
+  2. While uploading, set `processing` state and record upload progress.
+  3. After successful upload, set metadata (title, description, tags), apply thumbnail, and set privacy as configured.
+  4. Save `video_id`, `publish_time`, `upload_response` to DB.
+  5. Send confirmation notification with links and initial instructions.
+
+* **Failure handling**:
+
+  * If upload fails transiently -> retry with exponential backoff (max 3 attempts). Record retries.
+  * If permanent failure (quota, invalid metadata) -> set state `upload_failed`, notify ops with detailed error.
+
+## D. Confirmation & Notification
+
+* **On successful upload**:
+
+  * Notify via Slack/Email: `Uploaded: experiment_id, video_id, title, scheduled/public/private, thumbnail_preview_url`
+  * Provide quick action links in notification: `Open in YouTube Studio`, `View assets`, `Approve for monetization`, `Abort/Unlist`.
+  * If `auto_publish=false` and video is private: request human to review and publish.
+
+* **On flagged metadata**:
+
+  * Send `policy_alert` with reason: hashtags risk, possible copyright, or demonetization risk.
+  * Include recommended safe alternatives and 1-click apply buttons in the dashboard.
+
+## E. Monitoring & Rechecks (automated)
+
+Larry runs automated rechecks at scheduled intervals to evaluate performance and compliance.
+
+### Scheduled intervals & purpose
+
+* **T+15 minutes**: initial processing & early view checks (is video live? processing done?).
+* **T+1 hour**: initial impressions & early CTR. Quick abort if upload broken or processing stuck.
+* **T+24 hours**: main short-term evaluation window for Shorts (CTR, 15s retention, views).
+* **T+48 hours**: confirm or kill decision window for experiments.
+* **T+7 days**: longer-term metrics (watch time, subscriber conversion) and final archive decision.
+
+### Recheck process (per interval)
+
+1. Fetch analytics for `video_id` (YouTube Analytics API): impressions, views, CTR, avgViewDuration, watchTime, trafficSources.
+2. Compute KPIs relative to channel baseline (channel_median_CTR, channel_median_15s_retention, etc.).
+3. Apply decision rules (see section 10).
+4. If `promote`: enqueue `scale_job` (more thumbnails, titles, republish variants) and optionally schedule long-form repurpose.
+5. If `kill`: unlist/privatize and stop promotion; notify ops with reason.
+6. Log full metric snapshot and decision rationale in DB.
+
+## F. Promotion / Kill / Reupload logic
+
+* **Promote** (auto if success criteria met): create scaled variants (new thumbnails/titles/targeted descriptions), optionally increase ad spend (if monetized), and add video to repurposing queue.
+* **Kill**: quick unlist or privatize; optionally create notes for why (misleading metadata, bad retention). If kill due to misleading metadata but CTR was high, consider reupload with corrected metadata and new thumbnail only after human review.
+* **Reupload**: create edited version using same assets but corrected metadata and thumbnail; tag as `reupload_of:{video_id}` and cap reupload attempts (max 2 per original video).
+
+## G. Human review & overrides
+
+* Items flagged (policy risk, high experimental risk) require human approval before `public` upload. The dashboard shows all flagged experiments.
+* Reviewer actions:
+
+  * Approve & publish (optionally change metadata)
+  * Request edits (send back to `generate_experiment` with instructions)
+  * Reject & abort (delete assets and mark experiment failed)
+
+# 5. State machine (video lifecycle)
+
+States (ordered):
+
+```
+detected -> generating -> ready_for_upload -> awaiting_human -> uploading -> uploaded -> monitoring -> promoted | killed | archived | reuploading
+```
+
+Transitions include event triggers and timeouts. Example: `ready_for_upload` + `auto_publish=true` -> `uploading` ; `ready_for_upload` + `flagged` -> `awaiting_human`.
+
+# 6. Webhooks & events
+
+Use event-driven notifications for responsiveness.
+
+**Suggested events**:
+
+* `trend_detected` (payload: trend metadata)
+* `experiment_generated` (payload: experiment_id, assets, tags, risk_flags)
+* `upload_started` (experiment_id)
+* `upload_success` (experiment_id, video_id, publish_time)
+* `upload_failed` (experiment_id, error)
+* `analytics_snapshot` (experiment_id, metrics, timestamp)
+* `decision_made` (experiment_id, decision, rationale)
+* `human_action` (experiment_id, action, actor_id)
+
+These should be publish/subscribe (e.g., Pub/Sub, SNS). Subscribers: dashboard, alerting service, analytics logger.
+
+# 7. Database schema (minimal)
+
+**experiments**
+
+* id (uuid)
+* trend_id
+* title_recommendation
+* description_recommendation
+* tags (json)
+* hashtags (json)
+* risk_flags (json)
+* assets_paths (json)
+* created_at
+* state (enum)
+* video_id (nullable)
+* upload_response (json)
+* publish_time (nullable)
+* decision_status (enum)
+
+**metrics_snapshots**
+
+* id
+* experiment_id
+* timestamp
+* impressions
+* views
+* ctr
+* avg_view_duration
+* watch_time
+* subscribers_gained
+* raw_response (json)
+
+**events_log**
+
+* id
+* experiment_id
+* event_type
+* payload (json)
+* timestamp
+
+# 8. Pseudocode for critical workers
+
+### Trend worker
+
+```python
+def trend_worker():
+    trends = fetch_all_trends()  # YT + GoogleTrends + socials
+    spikes = detect_spikes(trends)
+    for s in spikes.top(10):
+        enqueue('generate_experiment', { 'trend': s })
+```
+
+### Generate worker
+
+```python
+def generate_experiment(trend):
+    set_state(experiment, 'generating')
+    outlines = gemini_outline(trend.topic, n=3)
+    ranked = cheap_rank(outlines)
+    chosen = ranked[:2]
+
+    scripts = [gemini_expand(o) for o in chosen]
+    hashtags = gemini_suggest_hashtags(trend.topic)
+    risk = hashtag_risk_check(trend.topic, hashtags)
+
+    if risk.high and config.require_human_for_risky:
+        persist(experiment, state='awaiting_human', risk_flags=risk)
+        notify_human(experiment)
+        return
+
+    audio_files = gemini_tts_batch(scripts, voice=config.gemini.tts_voice)
+    video_files = [assemble_video(a, script, stock_broll) for a,script in zip(audio_files,scripts)]
+    thumbs = gemini_make_thumbnails(chosen)
+
+    store_assets(experiment, audio_files, video_files, thumbs)
+    persist(experiment, state='ready_for_upload')
+    enqueue('upload_experiment', { 'experiment_id': experiment.id })
+```
+
+### Upload worker
+
+```python
+def upload_experiment(experiment_id):
+    exp = load_experiment(experiment_id)
+    if exp.state != 'ready_for_upload':
+        return
+
+    if exp.flags.require_human and not exp.human_approved:
+        set_state(exp,'awaiting_human')
+        notify_human_for_approval(exp)
+        return
+
+    set_state(exp,'uploading')
+    try:
+        result = youtube_upload(exp.primary_video_path, metadata=exp.metadata)
+        exp.video_id = result.video_id
+        exp.publish_time = result.publish_time
+        set_state(exp,'uploaded')
+        emit('upload_success', payload=result)
+        enqueue('recheck', { 'experiment_id': exp.id, 'when': now+15min })
+    except TransientError as e:
+        retry_with_backoff()
+    except PermanentError as e:
+        set_state(exp,'upload_failed')
+        notify_ops(e)
+```
+
+### Recheck worker
+
+```python
+def recheck(experiment_id):
+    exp = load_experiment(experiment_id)
+    metrics = fetch_yt_metrics(exp.video_id)
+    save_snapshot(exp.id, metrics)
+    decision = evaluate_decision(metrics, channel_baselines)
+    persist_decision(exp.id, decision)
+    if decision == 'promote':
+        enqueue('scale_job', { 'experiment_id': exp.id })
+    elif decision == 'kill':
+        youtube_unlist(exp.video_id)
+        set_state(exp,'killed')
+    elif decision == 'reupload':
+        create_reupload_job(exp)
+    # schedule next recheck according to lifecycle
+```
+
+# 9. Retry, backoff, and error handling
+
+* Use exponential backoff with jitter for transient API failures (e.g., 1s -> 2s -> 4s, max 3 attempts).
+* For resumable uploads, use YouTube's resumable upload flow, and persist upload session URIs to resume on worker restarts.
+* For gemini calls: if rate-limited, backoff and queue the job for next available slot; alert ops on repeated failures.
+* On unexpected exceptions, mark job `failed` and emit detailed event for ops.
+
+# 10. Decision thresholds and KPIs
+
+Store channel baseline metrics (rolling medians) and use them to evaluate experiments.
+
+**Suggested thresholds** (customize per channel):
+
+* Promote if: `CTR >= 1.25 * channel_median_CTR` AND `median_15s_retention >= 0.6`.
+* Kill if: `CTR <= 0.6 * channel_median_CTR` OR `median_15s_retention <= 0.3`.
+* Reupload if: high CTR but low retention AND evidence of misleading metadata (high CTR + low retention + flagged hashtags).
+* Secondary promotion criteria: subscriber conversion rate > channel_median * 1.3 over 7 days.
+
+Record rationale string for each decision for auditability.
+
+# 11. Dashboard & UI flows (operator perspective)
+
+## Dashboard pages
+
+* **Trending feed**: live spikes with z-score, region, and quick `generate experiment` button.
+* **Upload queue**: shows experiments `ready_for_upload`, `awaiting_human`, `uploading` with progress bars.
+* **Flagged items**: policy-risked experiments requiring human review (buttons: approve & publish, request edits, abort).
+* **Experiments**: filterable list with status, metrics snapshots, and history (promoted/killed/reuploads).
+* **Analytics**: channel baseline metrics, recent winners, A/B tests history.
+
+## Human review pop-up
+
+* Show: video preview, recommended metadata, flagged hashtags with risk reasons, last 3 thumbnail variants, a short checklist: `[ ] Correct? [ ] Compliant? [ ] Ready to publish?`
+* Actions: Approve & publish, Edit metadata, Send back to generator (add notes), Abort & delete.
+
+# 12. Security & compliance notes
+
+* Store API keys in secret manager; rotate keys regularly.
+* Rate-limit outbound API calls and respect provider TOS.
+* Keep experimental nonsense-hashtags under strict audit and logging; label experiments clearly.
+* For copyrighted audio: detect and flag via content ID match or manual checks; avoid monetization until cleared.
+
+# 13. Appendix: sample API payloads and templates
+
+### Upload metadata template
+
+```json
+{
+  "snippet": {
+    "title": "{title}",
+    "description": "{description}\n\nChapters: ...",
+    "tags": [{tag1},{tag2}],
+    "categoryId": "22"
+  },
+  "status": {
+    "privacyStatus": "{public|private|unlisted}",
+    "publishAt": "{optional_iso_time}"
+  }
+}
+```
+
+### Notification & confirmation message (Slack example)
+
+```
+Uploaded ✅
+Experiment: {experiment_id}
+Video: {title}
+Video ID: {video_id}
+Status: public (or private)
+Thumbnail: {thumbnail_preview_url}
+Review: {youtube_studio_url}
+Actions: [Open] [Unlist] [Request Edit]
+```
+
+---
+
+## Final notes
+
+This workflow balances speed and experimentation (Shorts-first) with compliance and human oversight. It supports rapid iteration while preventing obviously risky behaviour (misleading metadata, mass nonsense-hashtag spam). Tweak the recheck intervals and decision thresholds to match your channel size and content temperament.
+
+If you'd like, I can now:
+
+* generate the **full Node.js serverless implementation** for trend -> generate -> upload -> recheck workers (one-file templates), or
+* build the **React dashboard mockup** to handle human reviews, or
+* produce **detailed DB migration scripts** and SQL for the tables above.
+
+Tell me which you'd like next and I'll produce it ready-to-run.
+
+
+— Goals of the compliance & quality system
+
+Prevent copyright claims/takedowns before upload.
+
+Detect risky assets (audio, video, images, text) and flag for human review.
+
+Minimize manual work with automated pre-checks and smart fallbacks.
+
+Provide rapid remediation & appeals if a claim occurs.
+
+Make AI-generated content feel human (improved retention & trust) — ethically.
+
+Auditability and traceability for each asset (who generated it, when, source licenses).
+
+3 — High-level architecture (components)
+
+Asset Ingest & Metadata Extractor — when a generated asset is ready, extract metadata (audio fingerprint, audio length, sample rate, codec, thumbnails, sources for B-roll).
+
+Copyright Scanner — fingerprint audio/video, check against Content ID / third-party fingerprint DBs, check licensed asset manifests.
+
+Policy Checker — evaluate metadata for misleading info, disallowed content, or restricted categories.
+
+Risk Score Engine — combine signals into a single risk score (0–1).
+
+Human Review Queue — prioritized queue for flagged assets, with contextual data and recommended fixes.
+
+Claims & Appeals Manager — automated logging of claims, templated responses, and human escalation pathways.
+
+Provenance & Audit Log — store source attributions, license receipts, prompt logs, Gemini call ids, and generated assets for audits.
+
+User Experience (Ethical Humanization) Module — produces varied TTS, micro-pauses, small ad-libs, natural captions, and optional human voiceover passes.
+
+Monitoring & Alerting — for strikes, repeated claims, or suspicious patterns.
+
+4 — Copyright / Content ID system (detailed)
+4.1 Inputs and sources to check
+
+All audio assets (TTS, music beds, clips).
+
+Video footage (stock B-roll, UGC).
+
+Image assets (thumbnails, overlays).
+
+Third-party metadata: source license (paid stock, CC-BY, royalty-free).
+
+External fingerprint DBs: YouTube Content ID (where accessible via partners), third-party fingerprinting services (e.g., Audible Magic, ACRCloud), and internal channel history.
+
+4.2 Pre-upload checks (pipeline)
+
+When an experiment reaches ready_for_upload:
+
+Asset manifest: Produce manifest JSON:
+
+{
+  "audio": {"path": "...","duration": 38.2,"fingerprint": "...", "source": "gemini-tts/economy"},
+  "video": {"path":"...","contains_stock":true, "stock_ids":[...]},
+  "thumbnails": [...],
+  "prompts": "...",
+  "licenses": [{"asset_id":"xxx","license_type":"stock","receipt":"s3://..."}]
+}
+
+
+Audio fingerprinting:
+
+Generate an audio fingerprint for the final audio mix (not just raw TTS) using an audio-fingerprinting library (e.g., Chromaprint/AcoustID or using an API like ACRCloud/Audible Magic).
+
+Query fingerprint servers:
+
+Internal historical DB (past uploads from your channels)
+
+Third-party fingerprint DBs (ACR/Audible Magic) — pay-for-service
+
+If YouTube Content ID partner access exists, use that pipeline.
+
+Music & sample detection:
+
+Check for matches against licensed stock music IDs (if you included licensed music, verify the license is valid and present).
+
+For “popular audio” detection (memes, songs), if a match is found and no license exists, mark copyright_risk=true.
+
+Video visual fingerprinting (optional):
+
+For large producers, run visual fingerprinting for known copyrighted clips (harder/expensive). At minimum, check metadata of stock B-roll for license.
+
+Image check:
+
+Check if thumbnail uses copyrighted images or faces with unclear rights (e.g., celebrity images). If used, check license or remove.
+
+Text & quoted content:
+
+Check for long verbatim copyrighted text that might be disallowed (e.g., full song lyrics). Flag if present.
+
+Result: risk_score:
+
+Combine signals into a risk score:
+
+audio_match_confidence (0–1)
+
+music_license_missing (0/1)
+
+stock_license_present (0/1)
+
+named copyrighted entity use (0–1)
+
+total risk = weighted sum
+
+Example thresholds:
+
+risk_score < 0.15 → OK to auto-upload
+
+0.15 ≤ risk_score < 0.5 → require soft human review (fast)
+
+risk_score ≥ 0.5 → block upload until resolved
+
+4.3 Licensing manifest & automated rights attach
+
+When using paid stock music or footage, store license receipts in the DB and attach license metadata to the upload description (YouTube allows metadata fields — include “Licensed music: provider, license id” in description or YouTube’s content-ownership fields if available).
+
+For royalty-free music with attribution (e.g., CC-BY), automatically include attribution lines in the video description and metadata.
+
+4.4 If a fingerprint match occurs
+
+If fingerprint matches a known copyrighted track and license not present:
+
+If match confidence low (<0.4): mark needs_review and continue or optionally replace the audio with a safe alternative.
+
+If confidence medium-high (>=0.4): block auto-publish. Send urgent_review with suggested fixes (replace music, mute segment, or obtain license).
+
+Suggested fixes are auto-generated: e.g., “Replace music track with royaltyfree123 or remove last 8s where match occurs.”
+
+5 — Claims & appeals workflow
+5.1 Detecting claims
+
+Use YouTube Data API webhook (if available) or poll contentOwner / videos for new claim status.
+
+Record claim metadata: claimant_id, type (monetization/ownership), claim_timestamp, match_window (start-end), monetization_action.
+
+5.2 Immediate actions on claim
+
+Record claim in claims table with experiment_id, video_id, and fingerprint evidence.
+
+Determine autopilot action:
+
+If matched region: auto-send templated reply to human reviewer via dashboard/mobile push.
+
+If claim is non-blocking (monetization assigned to claimant but video remains up) and license exists in manifest: trigger auto-submission of license (if platform supports), or schedule human-appeal.
+
+If claim results in takedown: immediately log and notify ops; start appeal if evidence exists.
+
+5.3 Automated appeal support
+
+Provide pre-filled appeal templates (editable by human) that include:
+
+Asset manifest and licenses
+
+Generation logs: Gemini call ids, prompt text, generation timestamps
+
+Proof of license or fair use reasoning (if applicable)
+
+If the asset is genuine original content (e.g., your TTS reading of facts), prepare a factual defense: “I own/created the audio using Gemini TTS, audio fingerprint shows artificial generation, please clarify claim basis.”
+
+5.4 Escalation & auditing
+
+Keep line-item audit: which human approved upload, which TTS voice used, final mix exports with timestamps — useful if Creator Support asks.
+
+Retain assets for 180 days minimum for disputes.
+
+6 — Policy checking & metadata guardrails
+
+Misleading Metadata Detector: flag when title/hashtags have low semantic similarity to content (embedding similarity). If mismatch too large, set misleading_flag.
+
+Sensitive content detector: check for adult, violent, or copyrighted images (thumbnails) using classifier models; require human approval for borderline content.
+
+Monetization risk model: combine copyright risk + content sensitivity + channel history to produce monetization_risk.
+
+Automatic corrective actions:
+
+Replace or remove flagged hashtags.
+
+Replace thumbnail with safe template if flagged.
+
+Append attribution lines for CC content.
+
+7 — Provenance & audit logging (must-have fields)
+
+For each generated asset, store:
+
+asset_id (uuid), created_at, generator: e.g., gemini-tts:v2-economy, model call ids, prompt text (redact PII if needed).
+
+mix_id — unique final audio mix id and audio fingerprint.
+
+license_receipts — S3 path to license PDF or transaction id.
+
+human_approvals — user_id, timestamp, notes.
+
+upload_event — YouTube video_id, publish time, uploader service account.
+
+claim_history — array of claims and dispositions.
+
+This makes appeals faster and auditable.
+
+8 — Human-review UI: what to show & actions
+
+When an asset is flagged, provide a compact “what matters” view:
+
+Top panel
+
+Video preview (trim to suspected claim window),
+
+Risk score & top reasons (audio match: 0.76, license missing),
+
+Quick asset manifest (music id, license present? yes/no).
+
+Middle panel
+
+Suggested fixes (one-click where possible):
+
+Replace music (choose from library),
+
+Mute claim segment (auto-edit),
+
+Re-generate TTS with changed voice/phrasing,
+
+Mark as approved with justification.
+
+Bottom panel
+
+Buttons: Approve & publish, Request edits (send to generator), Archive & abort, Start appeal (prefill appeal text).
+
+Provide an audit log per decision that records the operator action.
+
+9 — Decision thresholds & automation rules (examples)
+Copyright risk → action mapping
+
+risk < 0.15 → Auto-publish allowed.
+
+0.15 ≤ risk < 0.35 → Auto-publish allowed but flag in monitoring and add “possible match” note in description.
+
+0.35 ≤ risk < 0.6 → Hold for fast human review (24h SLA).
+
+risk ≥ 0.6 → Block auto-publish; require human approval.
+
+Misleading metadata
+
+semantic_similarity(title, content) < 0.45 → hold until title/description updated.
+
+These thresholds are tunable per channel size/brand risk tolerance.
+
+10 — Making content feel human — ethical techniques
+
+I will provide ethical ways to make AI content feel more natural and human-like. All suggestions are allowed — none are aimed at deceptive evasion.
+
+10.1 Natural-sounding TTS (best practices)
+
+Use SSML: insert short breaks (<break time="120ms"/>), emphasis tags, and sentence-level prosody to mimic natural rhythm.
+
+Micro-variation: vary speech rate, pitch, and breath markers slightly between sentences (small deterministic randomness).
+
+Small ad-libs: append 1–2 token “uh/oh/you know” style filler phrases in shorter amounts — used sparingly to increase perceived humanness.
+
+Pause strategy: add slightly longer pause before an important phrase (dramatic timing).
+
+Breaths & mouth noise: some TTS voices can include soft breaths or small mouth noises — use in moderation.
+
+Avoid robotic repetition: rotate between 2–3 voice models/variants to reduce “sameness”.
+
+Implementation note: keep a flag in your generation pipeline: humanize_audio: true/false and apply SSML templates accordingly.
+
+10.2 Natural editing & pacing
+
+Human-like cadence: edit sentences to include natural sentence fragments; humans rarely talk in perfectly grammatical full sentences.
+
+Interjections & questions: short rhetorical questions draw engagement.
+
+Non-linear emphasis: raise intonation on key words — use SSML <emphasis level="strong">.
+
+10.3 Visual cues that feel human
+
+Subtitles style: slightly staggered timing for captions to match spoken emphasis and use natural line breaks.
+
+Camera motion: in composited shorts, small automatic camera pans/zooms emulate handheld motion.
+
+Face/emoji overlays: human faces or emotive icons increase perceived authenticity.
+
+10.4 Interaction & authenticity
+
+Call to action phrasing: ask for comments: “Which of these surprised you? Comment below.” This increases engagement.
+
+Human sign-off: include a short human voice line or text overlay: “—Larry AI” or “For the full breakdown, check the pinned comment.”
+
+Audio signatures: small unique non-copyright jingle (licensed or original) to brand content and avoid confusion with other creators.
+
+10.5 Human-in-the-loop final pass
+
+For high-value uploads (monetized or channel-critical), require a short human pass:
+
+Listen to TTS in context and approve or tweak.
+
+Approve thumbnail, title, and tags.
+
+This balances scale with quality.
+
+11 — Pseudocode snippets
+11.1 Pre-upload copyright check (simplified)
+def preupload_check(experiment):
+    manifest = build_manifest(experiment)
+    fingerprint = fingerprint_audio(manifest['final_audio_path'])
+    matches = query_fingerprint_services(fingerprint)
+    license_ok = check_license_receipts(manifest['licenses'])
+
+    risk_score = compute_risk_score(matches, license_ok, manifest)
+    if risk_score >= 0.6:
+        set_state(experiment, 'blocked_for_review')
+        notify_human(experiment, reason='high_copyright_risk', details=matches)
+    elif risk_score >= 0.35:
+        set_state(experiment, 'needs_quick_review')
+        notify_human(experiment, reason='medium_copyright_risk', details=matches)
+    else:
+        set_state(experiment, 'ready_for_upload')
+
+11.2 On claim callback handling
+def on_claim_received(claim_payload):
+    video_id = claim_payload['videoId']
+    experiment = find_experiment_by_video(video_id)
+    save_claim(experiment.id, claim_payload)
+    if license_in_manifest(experiment, claim_payload['asset_id']):
+        automatically_submit_license(experiment, claim_payload)
+    else:
+        notify_ops_for_appeal(experiment, claim_payload)
+
+11.3 Humanization SSML generator
+def humanize_script(script_text):
+    # basic heuristics: insert small pauses after commas and before punchlines
+    s = script_text.replace('.', '. <break time="160ms"/>')
+    # add micro-variations
+    s = s.replace('!', '! <prosody rate="95%">') + '</prosody>'
+    return f"<speak><prosody rate='medium'>{s}</prosody></speak>"
+
+12 — Monitoring, metrics & alerts for claims and takedowns
+
+Critical metrics to monitor
+
+daily_claims_count (per channel)
+
+claim_rate_per_upload (claims / uploads)
+
+strikes_count and strike_rate
+
+appeal_success_rate (successful appeals / total appeals)
+
+time_to_resolution (hours)
+
+cost_of_licensing (for paid music) vs. views_lost_from_claims
+
+Alerts
+
+If claim_rate_per_upload > baseline * 1.5 → high-priority alert.
+
+If any video receives a takedown → immediate push to Slack + SMS to ops.
+
+If appeal_success_rate < 30% → audit recent uploads and examine patterns.
+
+13 — Example DB additions (schema snippets)
+
+claims table:
+
+id, experiment_id, video_id, claimant_id, claim_type, confidence_score, start_time, end_time, status (pending/resolved/appealed/rejected), appeal_id, created_at
+
+licenses table:
+
+id, asset_id, provider, license_type, receipt_url, expires_at, notes
+
+provenance table:
+
+id, asset_id, generator, prompt_hash, model_id, call_id, user_approver_id, created_at
+
+14 — Process tips & operational best practices
+
+Prefer licensed or original music. It costs money but reduces risk significantly. Maintain a small, curated library of safe music.
+
+Document everything. If you ever appeal a claim, the more provenance you have (timestamps, prompts, receipts), the stronger your case.
+
+Tune risk thresholds based on channel size and tolerance. Smaller channels may accept more risk; larger brands must be conservative.
+
+Keep humans in the loop for monetized or high-visibility content.
+
+Avoid controversial or ambiguous content in thumbnails — YouTube often flags these even before audio matching.
+
+Rotate voices and templates to avoid repetitive patterns that reduce viewer trust and retention.
