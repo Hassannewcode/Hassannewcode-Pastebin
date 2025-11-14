@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Bullet Hell - APEX Engine v12.3 (Strategic Clearance Core)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the main layout and font */
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #030712; 
+            font-family: 'Inter', sans-serif;
+        }
+
+        #app-wrapper {
+            max-width: 600px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        
+        /* Main Game Canvas (Action Zone) */
+        #gameCanvas {
+            background-color: #0d0c1d;
+            border: 4px solid #00ffaa; 
+            box-shadow: 0 0 20px rgba(0, 255, 170, 0.8); 
+            max-width: 100%;
+            border-radius: 8px 8px 0 0;
+            touch-action: none; 
+            display: block; 
+        }
+
+        /* Control Canvas (Planning Zone) - Only for Player Mode */
+        #controlCanvas {
+            background-color: #1a1a2e; 
+            border: 4px solid #4f46e5; 
+            border-top: none;
+            box-shadow: 0 5px 20px rgba(79, 70, 229, 1.0); 
+            max-width: 100%;
+            border-radius: 0 0 8px 8px;
+            touch-action: none;
+            display: block;
+        }
+        
+        /* Custom scrollbar hiding for cleaner view */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-mono">
+    
+    <!-- Background Image Placeholder for Context -->
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.1;">
+        <div style="width: 100%; height: 100%; background: url('https://placehold.co/1200x800/222233/00ffaa?text=Strategic+Clearance+Core+v12.3') center / cover no-repeat;"></div>
+    </div>
+    
+
+    <div id="app-wrapper">
+        <div class="p-2 w-full">
+            <h1 class="text-3xl font-extrabold text-center text-red-500 mb-2">APEX STRATEGY ENGINE v12.3 (STRATEGIC CLEARANCE CORE)</h1>
+            
+            <!-- Mode Selector -->
+            <div class="flex flex-wrap justify-center gap-2 mb-4">
+                <select id="mode-selector" class="p-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+                    <option value="PLAYER">Player Control (Patterns)</option>
+                    <option value="BOT_EASY">Bot (Easy)</option>
+                    <option value="BOT_HARD">Bot (Hard)</option>
+                    <option value="BOT_ANC">Bot (ANC: Adaptive Ghost)</option>
+                    <option value="BOT_VBC">Bot (VBC: Strategic Clearance) - V12.3 MAX RATING</option>
+                </select>
+                <button id="restart-game" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md hover:shadow-lg">
+                    RESTART
+                </button>
+            </div>
+
+            <!-- Status Bar -->
+            <div id="status-bar" class="flex justify-between text-lg font-bold p-1 bg-gray-800 rounded-md mb-2 shadow-inner">
+                <span id="score-display" class="text-yellow-400">Time: 0.00s</span>
+                <span id="speed-display" class="text-lime-400">Difficulty: x1.0</span>
+            </div>
+            
+            <!-- AA Charge Bar & Dynamic Speed Status -->
+            <div class="flex gap-2 w-full mb-2">
+                <div id="aa-container" class="flex-grow h-4 bg-gray-700 rounded-full overflow-hidden shadow-inner border border-gray-600">
+                    <div id="aa-charge-bar" class="h-full bg-red-600 transition-all duration-300" style="width: 0%;">
+                        <p class="text-xs text-center font-bold text-white leading-4">AA CHARGE: 0%</p>
+                    </div>
+                </div>
+                <div id="speed-mode-status" class="w-1/4 h-4 bg-gray-700 rounded-full overflow-hidden shadow-inner border border-gray-600 text-center text-xs font-bold text-white leading-4 p-0.5">
+                    Mode: Minimal
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Zone (Game) -->
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Planning Zone (Path Drawing Control) -->
+        <canvas id="controlCanvas"></canvas>
+        <p id="control-hint" class="text-xs text-center text-gray-400 mt-2">Draw a deliberate path below. Lower sensitivity (now 15ms) requires intentional movements.</p>
+    </div>
+    
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl border-4 border-red-600 text-center w-11/12 max-w-sm">
+            <h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-pulse">GAME OVER</h2>
+            <p class="text-xl mb-6">You survived for:</p>
+            <p id="final-score" class="text-3xl font-bold text-yellow-300 mb-8">0.00 seconds</p>
+            <button id="modal-restart-button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition duration-200 shadow-lg w-full">
+                RESTART (R)
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // DOM Elements
+        const gameCanvas = document.getElementById('gameCanvas');
+        const gameCtx = gameCanvas.getContext('2d');
+        const controlCanvas = document.getElementById('controlCanvas');
+        const controlCtx = controlCanvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const speedDisplay = document.getElementById('speed-display');
+        const modeSelector = document.getElementById('mode-selector');
+        const restartButton = document.getElementById('restart-game');
+        const controlHint = document.getElementById('control-hint');
+        const modal = document.getElementById('game-over-modal');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const modalRestartButton = document.getElementById('modal-restart-button');
+        const aaContainer = document.getElementById('aa-container');
+        const aaChargeBar = document.getElementById('aa-charge-bar');
+        const speedModeStatus = document.getElementById('speed-mode-status');
+
+        // Constants
+        const PLAYER_SIZE = 12; // Visual size (diameter)
+        const COLLISION_RADIUS = 3; // Actual collision radius (Hitbox) - Small for challenge
+        const DRAWING_RADIUS = PLAYER_SIZE / 2; // Visual radius for the Pentagon
+        const PLAYER_COLOR = '#00ffff'; 
+        const BOT_COLOR = '#a8e632'; // Lime Green/Apex Color
+        const PATH_COLOR = '#4e75ff'; 
+        
+        // --- VBC v12.3 Architecture Constants (STRATEGIC CLEARANCE CORE) ---
+        const BASE_TEST_DIRECTIONS = 24; 
+        const MAX_CRUISE_SPEED = 6.0; 
+        const MAX_EMERGENCY_SPEED = 12.0; 
+        const CRITICAL_DANGER_THRESHOLD = 50000; 
+        const CONGESTION_THRESHOLD_SCORE = 300000; 
+        const LOW_MOVEMENT_REWARD = -5000; 
+        const LOW_THRESHOLD_SENSOR_DIST = 40; 
+        const LOW_THRESHOLD_PENALTY = 100000; 
+        
+        // --- Mid-Box Centering & Wall Avoidance (IMPROVED) ---
+        const MIN_DISTANCE_FROM_WALL = 120; // New: Minimum desired clearance from edge
+        const WALL_AVOIDANCE_PENALTY = 10000000; // New: Massive penalty multiplier for boundary violation
+        const CENTERING_FORCE_MAGNITUDE = 0.08; 
+        const TANGENTIAL_ROAM_FORCE = 0.5; 
+        const VECTOR_BLEND_COUNT = 3; 
+        const MIN_CLEARANCE_PENALTY_MULTIPLIER = 5000000; 
+        const IDLE_LIMIT_MS = 2000; 
+        const IDLE_THRESHOLD = 0.5; 
+        
+        // --- Strategic Clearance Constants (IMPROVED) ---
+        const FINAL_CLEARANCE_RADIUS = 300; // Increased search depth
+        const SAFE_ZONE_PRIORITY_MULTIPLIER = 0.08; // Increased reward for safe zone
+        const PREDICTION_TIME_S = 4.0; 
+        const PREDICTION_STEP_MS = 50; 
+        const PREDICTION_STEPS = (PREDICTION_TIME_S * 1000) / PREDICTION_STEP_MS;
+        
+
+        // Sentinel Strategy Constants 
+        const SAFETY_CUSHION = 50; 
+        const STRATEGIC_SAFETY_THRESHOLD = 150; 
+        const THREAT_HORIZON = 300; 
+        const IDEAL_MID_RADIUS_PERCENT = 0.3; 
+        const STRATEGIC_ORBIT_PENALTY = 0.005; 
+        
+        // AA System Constants 
+        const AA_RADIUS = 100; 
+        const AA_COOLDOWN_MS = 10000; 
+        const AA_PROACTIVE_SCORE_THRESHOLD = 25000; 
+        const AA_CHARGE_RATE = 1.8; 
+        
+        // Sensor Configuration (16 Axes)
+        const FOV_AXES = 12; 
+        const PERIMETER_AXES = 4; 
+        const FOV_ANGLE_RANGE = 2 * Math.PI * 0.75; 
+        
+        // Game State Variables
+        let player = {};
+        let bullets = [];
+        let bot = {};
+        let stars = []; 
+        let playerPath = []; 
+        let drawnPath = []; 
+        let isDrawing = false;
+        let gameRunning = false;
+        let startTime = 0;
+        let lastBulletSpawnTime = 0;
+        let animationFrameId = null; 
+        let lastPathPointTime = 0;
+        let gameMode = modeSelector.value; 
+        let lastUpdateTime = performance.now(); 
+
+        // Pattern System Variables
+        let isPatternActive = false;
+        let nextPatternTime = 0;
+        let patternStartTime = 0;
+        const PATTERN_PAUSE = 4000; 
+        const PATTERN_DURATION = 1500; 
+        
+        // --- Core Utilities and Resizing ---
+
+        function resizeCanvas() {
+            const wrapper = document.getElementById('app-wrapper');
+            const availableWidth = wrapper.clientWidth - 32; 
+            
+            const maxWidth = 600;
+            const size = Math.min(availableWidth, maxWidth); 
+            
+            gameCanvas.width = size;
+            gameCanvas.height = size * 0.75; 
+            
+            controlCanvas.width = size;
+            controlCanvas.height = 120; 
+
+            // Center player/bot on resize
+            if (player.x !== undefined) {
+                player.x = gameCanvas.width / 2;
+                player.y = gameCanvas.height / 2;
+                bot.x = gameCanvas.width / 2 + 50; 
+                bot.y = gameCanvas.height / 2 + 50;
+            }
+            
+            initStars(gameCanvas.width, gameCanvas.height);
+            if (!gameMode.startsWith('BOT')) {
+                 drawControlCanvas(false);
+            }
+        }
+        
+        function initStars(width, height) {
+            stars = [];
+            for (let i = 0; i < 100; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    radius: Math.random() * 1.5 + 0.5,
+                    opacity: Math.random() * 0.5 + 0.5,
+                    vx: Math.random() * 0.2 - 0.1,
+                    vy: Math.random() * 0.2 - 0.1
+                });
+            }
+        }
+        
+        function initGame() {
+            gameMode = modeSelector.value;
+            
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null; 
+            }
+            
+            const now = performance.now();
+            lastUpdateTime = now; 
+
+            // Set Player/Bot physical state
+            player = { 
+                x: gameCanvas.width / 2, 
+                y: gameCanvas.height / 2, 
+                speed: 10.0, 
+                radius: COLLISION_RADIUS, 
+                drawRadius: DRAWING_RADIUS, 
+                color: PLAYER_COLOR,
+                rotation: 0,
+                vx: 0,
+                vy: 0,
+            };
+            
+            bot = { 
+                x: gameCanvas.width / 2 + 50, 
+                y: gameCanvas.height / 2 + 50, 
+                currentMaxSpeed: MAX_CRUISE_SPEED, 
+                baseMaxSpeed: MAX_CRUISE_SPEED, 
+                emergencyMaxSpeed: MAX_EMERGENCY_SPEED, 
+                radius: COLLISION_RADIUS, 
+                drawRadius: DRAWING_RADIUS, 
+                color: BOT_COLOR, 
+                vx: 0, 
+                vy: 0,
+                rotation: 0, 
+                visualRotation: 0, 
+                predictedPath: [],
+                proximityMarkers: [], // Renamed from dangerMarkers
+                sensorReadings: [],
+                topPaths: [], // Stores top 5 scored paths for debug
+                aaCharge: 0, 
+                aaCooldown: 0, 
+                maxPredictedDanger: 0, 
+                closestPredictedMiss: THREAT_HORIZON, 
+                speedMode: 'Minimal', 
+                minimalMoveTimer: 0, 
+                escortTarget: null, 
+                strategicTarget: null, 
+                clumpCenter: null, 
+                totalDangerScore: 0,
+                safeZoneClearance: 0, // New: Best clearance found
+            };
+
+            bullets = [];
+            playerPath = [];
+            drawnPath = [];
+            isDrawing = false;
+            gameRunning = true;
+            
+            startTime = now;
+            lastBulletSpawnTime = now;
+            nextPatternTime = now + 5000; 
+            
+            modal.classList.add('hidden');
+            
+            const isBotMode = gameMode.startsWith('BOT');
+            controlHint.classList.toggle('hidden', isBotMode);
+            controlCanvas.classList.toggle('hidden', isBotMode);
+            aaContainer.classList.toggle('hidden', isBotMode);
+            speedModeStatus.classList.toggle('hidden', isBotMode);
+            
+            controlCtx.clearRect(0, 0, controlCanvas.width, controlCtx.height);
+            updateAAChargeUI();
+            updateSpeedModeUI();
+
+            gameLoop(now);
+        }
+
+        // --- Collision Detection ---
+        function checkCollision() {
+            const entity = (gameMode === 'PLAYER') ? player : bot;
+            
+            for (const bullet of bullets) {
+                const distance = Math.sqrt(
+                    (entity.x - bullet.x) ** 2 + (entity.y - bullet.y) ** 2
+                );
+                // Collision check against the tiny, known COLLISION_RADIUS (3px)
+                if (distance < entity.radius + bullet.radius) { 
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- Input Handlers (Player Path Drawing) ---
+        function getCanvasPos(e, canvasEl) {
+            const rect = canvasEl.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function mapControlToGame(point) {
+            return {
+                x: point.x,
+                y: (point.y / controlCanvas.height) * gameCanvas.height
+            };
+        }
+
+        function recordPathPoint(pos) {
+            const now = performance.now();
+            if (now - lastPathPointTime > 15) { 
+                const controlPoint = { 
+                    x: Math.min(controlCanvas.width, Math.max(0, pos.x)),
+                    y: Math.min(controlCanvas.height, Math.max(0, pos.y)) 
+                };
+                
+                drawnPath.push(controlPoint);
+                
+                const gamePoint = mapControlToGame(controlPoint);
+                playerPath.push(gamePoint);
+                
+                lastPathPointTime = now;
+            }
+        }
+        
+        controlCanvas.addEventListener('pointerdown', (e) => {
+            if (!gameRunning || gameMode.startsWith('BOT')) return;
+            e.preventDefault();
+            isDrawing = true;
+            drawnPath = []; 
+            playerPath = []; 
+            
+            controlCtx.clearRect(0, 0, controlCanvas.width, controlCtx.height); 
+
+            recordPathPoint(getCanvasPos(e, controlCanvas));
+            drawControlCanvas(true); 
+        });
+
+        controlCanvas.addEventListener('pointermove', (e) => {
+            if (!gameRunning || !isDrawing || gameMode.startsWith('BOT')) return;
+            e.preventDefault();
+            recordPathPoint(getCanvasPos(e, controlCanvas));
+        });
+
+        const finalizePath = () => {
+            if (!isDrawing || gameMode.startsWith('BOT')) return;
+            isDrawing = false;
+        };
+
+        window.addEventListener('pointerup', finalizePath);
+        window.addEventListener('pointercancel', finalizePath);
+
+        // Event listeners
+        modeSelector.addEventListener('change', initGame);
+        restartButton.addEventListener('click', initGame);
+        modalRestartButton.addEventListener('click', initGame);
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'r' && !gameRunning) {
+                initGame();
+            }
+        });
+
+        // --- AA System Logic (Simplified) ---
+        function activateAntiAir(currentTime) {
+            if (bot.aaCharge === 100 && currentTime > bot.aaCooldown) {
+                let bulletsRemoved = 0;
+                
+                bullets = bullets.filter(bullet => {
+                    const distance = Math.sqrt(
+                        (bot.x - bullet.x) ** 2 + (bot.y - bullet.y) ** 2
+                    );
+                    if (distance < AA_RADIUS) {
+                        bulletsRemoved++;
+                        return false; 
+                    }
+                    return true;
+                });
+                
+                if (bulletsRemoved > 0) {
+                    bot.aaCharge = 0;
+                    bot.aaCooldown = currentTime + AA_COOLDOWN_MS;
+                    drawAAPulse();
+                }
+            }
+        }
+
+        function updateAAChargeUI() {
+            if (gameMode.startsWith('BOT')) {
+                const percentage = Math.floor(bot.aaCharge);
+                aaChargeBar.style.width = `${percentage}%`;
+                aaChargeBar.innerHTML = `<p class="text-xs text-center font-bold text-white leading-4">${percentage}% ${bot.aaCharge === 100 ? '(READY)' : ''}</p>`;
+                aaChargeBar.className = `h-full ${bot.aaCharge === 100 ? 'bg-red-500 animate-pulse' : 'bg-red-800'} transition-all duration-300`;
+            }
+        }
+
+        function updateSpeedModeUI() {
+            if (gameMode.startsWith('BOT')) {
+                 const mode = bot.speedMode;
+                 speedModeStatus.textContent = `Mode: ${mode}`;
+                 
+                 // Default Minimal/Cruise/Roam
+                 if (mode === 'Minimal' || mode === 'Strategic Roam') {
+                    speedModeStatus.style.backgroundColor = '#10b981'; 
+                    speedModeStatus.classList.remove('animate-pulse');
+                 } else if (mode === 'Cruise') {
+                    speedModeStatus.style.backgroundColor = '#4b5563'; 
+                    speedModeStatus.classList.remove('animate-pulse');
+                 }
+                 
+                 // Emergency/Evasion
+                 if (mode === 'Emergency') {
+                    speedModeStatus.style.backgroundColor = '#ffc107'; 
+                    speedModeStatus.classList.add('animate-pulse');
+                 } else if (mode === 'Evasion') {
+                     speedModeStatus.style.backgroundColor = '#f43f5e'; // Pink/Red for Evasion
+                     speedModeStatus.classList.add('animate-pulse');
+                 }
+                 
+                 // Strategic Modes
+                 if (mode === 'Escort') {
+                    speedModeStatus.style.backgroundColor = '#1d4ed8'; // Blue for escort
+                    speedModeStatus.classList.add('animate-pulse');
+                 } else if (mode === 'Orbit') {
+                    speedModeStatus.style.backgroundColor = '#facc15'; // Yellow for orbit
+                    speedModeStatus.classList.remove('animate-pulse');
+                 } else if (mode === 'Approach') {
+                    speedModeStatus.style.backgroundColor = '#6366f1'; // Lighter purple for approach
+                    speedModeStatus.classList.remove('animate-pulse');
+                 }
+            }
+        }
+        
+        function drawAAPulse() {
+            let pulseDuration = 500;
+            let start = performance.now();
+            
+            function animatePulse(timestamp) {
+                const elapsed = timestamp - start;
+                const progress = elapsed / pulseDuration;
+                
+                if (progress > 1) return; 
+
+                gameCtx.save();
+                gameCtx.globalAlpha = 1 - progress; 
+                gameCtx.strokeStyle = '#ff0000';
+                gameCtx.lineWidth = 5 + progress * 10; 
+                gameCtx.beginPath();
+                gameCtx.arc(bot.x, bot.y, AA_RADIUS * progress, 0, Math.PI * 2);
+                gameCtx.stroke();
+                gameCtx.restore();
+                
+                requestAnimationFrame(animatePulse);
+            }
+            requestAnimationFrame(animatePulse);
+        }
+
+        // --- AI Logic (Vector Blending Core v12.3) ---
+
+        function lerp(start, end, t) {
+            return start + (end - start) * t;
+        }
+
+        function predictFutureBulletPos(bullet, step) {
+            const timeSeconds = step * (PREDICTION_STEP_MS / 1000);
+            return {
+                x: bullet.x + bullet.vx * timeSeconds,
+                y: bullet.y + bullet.vy * timeSeconds,
+                radius: bullet.radius
+            };
+        }
+        
+        // --- Layer 1.5: Strategic Clearance Scanner ---
+
+        function calculateLocalClearance(x, y, maxSearchDist) {
+            const axisCount = 16;
+            let minObstructionDist = maxSearchDist;
+            const botRadius = COLLISION_RADIUS;
+            
+            for (let i = 0; i < axisCount; i++) {
+                const angle = i * (2 * Math.PI / axisCount);
+                const dx = Math.cos(angle);
+                const dy = Math.sin(angle);
+                
+                // Scan along the ray (20 steps is enough resolution)
+                for (let j = 1; j <= 20; j++) {
+                    const currentDist = (j / 20) * maxSearchDist;
+                    const scanX = x + dx * currentDist;
+                    const scanY = y + dy * currentDist;
+                    
+                    // 1. Wall check
+                    if (scanX < 0 || scanX > gameCanvas.width || scanY < 0 || scanY > gameCanvas.height) {
+                        minObstructionDist = Math.min(minObstructionDist, currentDist);
+                        break;
+                    }
+                    
+                    // 2. Bullet check (against current bullet positions as a heuristic for clear space)
+                    for (const bullet of bullets) {
+                        const bulletDist = Math.sqrt((scanX - bullet.x) ** 2 + (scanY - bullet.y) ** 2);
+                        if (bulletDist < botRadius + bullet.radius) {
+                            minObstructionDist = Math.min(minObstructionDist, currentDist);
+                            break;
+                        }
+                    }
+                    if (minObstructionDist < currentDist) break;
+                }
+            }
+            
+            return minObstructionDist;
+        }
+
+        // --- Layer 1: Sensor & Data Gathering (Unchanged) ---
+
+        function gatherSensorData(startX, startY) {
+            const sensorReadings = [];
+            const steps = 10; 
+            const maxDistance = THREAT_HORIZON + 50; 
+            const botRadius = bot.radius; 
+
+            const fovStartAngle = bot.rotation - FOV_ANGLE_RANGE / 2;
+            for (let i = 0; i < FOV_AXES; i++) {
+                const angle = fovStartAngle + i * (FOV_ANGLE_RANGE / (FOV_AXES - 1));
+                sensorReadings.push(scanSingleAxis(startX, startY, angle, maxDistance, botRadius, steps, 'FOV'));
+            }
+
+            const perimeterStartAngle = bot.rotation + FOV_ANGLE_RANGE / 2;
+            for (let i = 0; i < PERIMETER_AXES; i++) {
+                const angle = perimeterStartAngle + i * ( (2 * Math.PI - FOV_ANGLE_RANGE) / PERIMETER_AXES );
+                 sensorReadings.push(scanSingleAxis(startX, startY, angle, maxDistance, botRadius, steps, 'PERIMETER'));
+            }
+            
+            return sensorReadings;
+        }
+        
+        function scanSingleAxis(startX, startY, angle, maxDist, botRadius, steps, type) {
+            const dx = Math.cos(angle);
+            const dy = Math.sin(angle);
+            let closestThreatDist = maxDist;
+            let closestBullet = null;
+
+            for (let j = 1; j <= steps; j++) {
+                const currentDist = (j / steps) * maxDist;
+                const scanX = startX + dx * currentDist;
+                const scanY = startY + dy * currentDist;
+
+                let wallHit = false;
+                if (scanX < 0 || scanX > gameCanvas.width || scanY < 0 || scanY > gameCanvas.height) {
+                    closestThreatDist = Math.min(closestThreatDist, currentDist);
+                    wallHit = true;
+                }
+                
+                if (!wallHit) {
+                    for (const bullet of bullets) {
+                        const bulletDist = Math.sqrt((scanX - bullet.x) ** 2 + (scanY - bullet.y) ** 2);
+                        // Check clearance against COLLISION_RADIUS
+                        if (bulletDist < botRadius + bullet.radius) { 
+                            closestThreatDist = Math.min(closestThreatDist, currentDist);
+                            closestBullet = bullet; 
+                            break; 
+                        }
+                    }
+                }
+                if (closestBullet) break;
+            }
+            
+            return { distance: closestThreatDist, angle: angle, type: type, threat: closestBullet };
+        }
+
+        // --- Layer 2: God Mode Path Scoring Engine (VBC v12.3) ---
+
+        function scoreCandidatePath(startX, startY, velocityX, velocityY, maxSpeed, center, sensorData) {
+            let currentX = startX;
+            let currentY = startY;
+            let score = 0; 
+            const botRadius = bot.radius; 
+            const pathCoordinates = [];
+            const proximityMarkers = []; // Renamed
+            let maxStepDangerScore = 0; 
+            let closestPredictedMiss = THREAT_HORIZON * 2; 
+            let totalDangerScore = 0; 
+            
+            const currentSpeedMagnitude = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+            
+            const IDEAL_MID_RADIUS = Math.min(gameCanvas.width, gameCanvas.height) * IDEAL_MID_RADIUS_PERCENT * 0.5;
+
+            // --- A. MOVEMENT CONTROL PENALTY / REWARD ---
+            if (currentSpeedMagnitude < 0.1) {
+                 score += LOW_MOVEMENT_REWARD * 10; 
+            } else {
+                 score += currentSpeedMagnitude * currentSpeedMagnitude * 200; 
+            }
+            if (currentSpeedMagnitude > bot.baseMaxSpeed + 0.1) {
+                score += currentSpeedMagnitude * 1000; 
+            }
+
+
+            // --- B. SENSOR THRESHOLD PENALTIES ---
+            let fovTriggered = false;
+            for(const reading of sensorData) {
+                if (reading.type === 'FOV' && reading.distance < LOW_THRESHOLD_SENSOR_DIST) {
+                    fovTriggered = true;
+                }
+                if (reading.type === 'PERIMETER' && reading.distance < LOW_THRESHOLD_SENSOR_DIST * 2) {
+                    score += LOW_THRESHOLD_PENALTY * 0.2; 
+                }
+            }
+            
+            if (fovTriggered && currentSpeedMagnitude < 0.1) {
+                 score += LOW_THRESHOLD_PENALTY; 
+            }
+
+
+            for (let step = 1; step <= PREDICTION_STEPS; step++) {
+                currentX += velocityX * (PREDICTION_STEP_MS / 1000);
+                currentY += velocityY * (PREDICTION_STEP_MS / 1000);
+
+                pathCoordinates.push({ x: currentX, y: currentY });
+
+                // --- 1. Collision & Proximity Penalty (The 'Sweaty' Part) ---
+                let stepDangerScore = 0;
+
+                for (const bullet of bullets) {
+                    const futureBullet = predictFutureBulletPos(bullet, step);
+                    const dx = currentX - futureBullet.x;
+                    const dy = currentY - futureBullet.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Clearance calculated against the actual COLLISION_RADIUS
+                    const currentClearance = distance - (botRadius + futureBullet.radius); 
+                    closestPredictedMiss = Math.min(closestPredictedMiss, currentClearance);
+
+                    // Collision (INSTANT INFINITY SCORE)
+                    if (currentClearance < 0) {
+                        return {score: Infinity, path: [], proximityMarkers: [], maxStepDangerScore: Infinity, closestPredictedMiss: -Infinity, totalDangerScore: Infinity, clearance: 0};
+                    }
+                    
+                    // Proximity Penalty (Aggressive inverse squared penalty)
+                    if (currentClearance < SAFETY_CUSHION) {
+                         // The smaller the clearance, the larger the penalty
+                         const normalizedClearance = Math.max(1, currentClearance); 
+                         const proximityPenalty = MIN_CLEARANCE_PENALTY_MULTIPLIER / (normalizedClearance * normalizedClearance);
+                         score += proximityPenalty;
+                         stepDangerScore += proximityPenalty;
+                         totalDangerScore += proximityPenalty; // Aggregate total danger
+                         
+                         if (proximityPenalty > 5000) {
+                             // Renamed to proximityMarkers
+                             proximityMarkers.push({x: currentX, y: currentY});
+                         }
+                    }
+                }
+                maxStepDangerScore = Math.max(maxStepDangerScore, stepDangerScore);
+                
+                // --- 2. Boundary Avoidance Penalty (Mid-Box Strategy Enforcement - NEW) ---
+                const distToLeft = currentX;
+                const distToRight = gameCanvas.width - currentX;
+                const distToTop = currentY;
+                const distToBottom = gameCanvas.height - currentY;
+                
+                const minWallDistance = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+                // 2a. Hard penalty for immediate wall collision
+                if (minWallDistance < botRadius + 5) {
+                    return {score: Infinity, path: [], proximityMarkers: [], maxStepDangerScore: Infinity, closestPredictedMiss: -Infinity, totalDangerScore: Infinity, clearance: 0};
+                }
+                
+                // 2b. Gradient penalty for approaching the edge (Pushing into the Mid-Box)
+                if (minWallDistance < MIN_DISTANCE_FROM_WALL) {
+                    const deviation = MIN_DISTANCE_FROM_WALL - minWallDistance;
+                    // Exponentially increasing penalty as bot moves closer to the wall
+                    const wallPenalty = WALL_AVOIDANCE_PENALTY * (deviation / MIN_DISTANCE_FROM_WALL) ** 3; 
+                    score += wallPenalty;
+                }
+                
+                
+                // --- 3. Strategic Orbit Penalty (Mid-Box Centering) ---
+                const distToCenter = Math.sqrt((currentX - center.x) ** 2 + (currentY - center.y) ** 2);
+                const radiusDeviation = Math.abs(distToCenter - IDEAL_MID_RADIUS);
+                
+                const aaNeedFactor = Math.max(0, 1 - (bot.aaCharge / 50)); 
+                
+                const aaStrategicScore = radiusDeviation * radiusDeviation * STRATEGIC_ORBIT_PENALTY * (1 - aaNeedFactor) * 2;
+                score += aaStrategicScore;
+            }
+            
+            // --- C. Safety Gradient Reward / NEAR MISS PENALTY ---
+            if (closestPredictedMiss < SAFETY_CUSHION) {
+                // Massive final layer penalty for low clearance
+                score += 100000 * (SAFETY_CUSHION - closestPredictedMiss);
+            }
+            
+            // Always reward wide clearance
+            score -= closestPredictedMiss * 200; 
+            
+            // --- D. Strategic Clearance Score (SafeZone Prioritization - IMPROVED) ---
+            let finalClearance = 0;
+            if (pathCoordinates.length > 0) {
+                const endPoint = pathCoordinates[pathCoordinates.length - 1];
+                // Check a wider search radius when danger is low to prioritize safe zones
+                const searchRadius = (totalDangerScore < CONGESTION_THRESHOLD_SCORE) ? FINAL_CLEARANCE_RADIUS * 1.5 : FINAL_CLEARANCE_RADIUS; 
+                finalClearance = calculateLocalClearance(endPoint.x, endPoint.y, searchRadius);
+            }
+            
+            let safeZoneReward = 0;
+            if (finalClearance > FINAL_CLEARANCE_RADIUS / 4) {
+                // Reward is based on the cube of the clearance distance for heavy prioritization (increased multiplier)
+                safeZoneReward = finalClearance * finalClearance * finalClearance * SAFE_ZONE_PRIORITY_MULTIPLIER; 
+            }
+            
+            score -= safeZoneReward; // Subtracting score is a reward
+            
+            // --- E. PRECISION MOVEMENT REWARD (Micro-Dodging) ---
+            const PRECISION_MIN_CLEARANCE = botRadius * 2; 
+            const PRECISION_MAX_CLEARANCE = 50;
+            
+            if (closestPredictedMiss > PRECISION_MIN_CLEARANCE && closestPredictedMiss < PRECISION_MAX_CLEARANCE) {
+                const inverseVelocity = 1 / (currentSpeedMagnitude + 0.1); 
+                score -= inverseVelocity * 10000; 
+            }
+
+
+            return {score, path: pathCoordinates, proximityMarkers, maxStepDangerScore, closestPredictedMiss, totalDangerScore, clearance: finalClearance};
+        }
+
+        function generateCandidateVelocities(maxSpeed, currentVX, currentVY) {
+            const candidates = [];
+            const currentSpeed = Math.sqrt(currentVX * currentVX + currentVY * currentVY);
+            
+            // 1. Full Stop / Minimal Movement
+            candidates.push({ vx: 0, vy: 0 }); 
+            
+            // 2. Full Acceleration in 24 primary directions (Increased Resolution)
+            for (let i = 0; i < BASE_TEST_DIRECTIONS; i++) {
+                const angle = i * (2 * Math.PI / BASE_TEST_DIRECTIONS); 
+                candidates.push({ vx: Math.cos(angle) * maxSpeed, vy: Math.sin(angle) * maxSpeed });
+            }
+            
+            // 3. Current Direction Cruise (Maintain momentum)
+            if (currentSpeed > 0.1) {
+                const angle = Math.atan2(currentVY, currentVX);
+                candidates.push({ vx: Math.cos(angle) * bot.baseMaxSpeed * 0.75, vy: Math.sin(angle) * bot.baseMaxSpeed * 0.75 }); 
+                candidates.push({ vx: Math.cos(angle) * bot.baseMaxSpeed * 0.25, vy: Math.sin(angle) * bot.baseMaxSpeed * 0.25 }); 
+            }
+            
+            // 4. Half Speed in 24 primary directions
+            const halfSpeed = maxSpeed * 0.5;
+            for (let i = 0; i < BASE_TEST_DIRECTIONS; i++) {
+                const angle = i * (2 * Math.PI / BASE_TEST_DIRECTIONS); 
+                candidates.push({ vx: Math.cos(angle) * halfSpeed, vy: Math.sin(angle) * halfSpeed });
+            }
+
+            // Filter to get unique candidates
+            const uniqueCandidates = [];
+            const seen = new Set();
+            for (const c of candidates) {
+                const key = `${c.vx.toFixed(2)},${c.vy.toFixed(2)}`; 
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueCandidates.push(c);
+                }
+            }
+            return uniqueCandidates;
+        }
+
+        // --- Layer 3: Vector Blending Core (VBC) Manager ---
+
+        function adaptiveControlManager(currentBot, currentTime) {
+            
+            // 1. GATHER SENSOR DATA
+            currentBot.sensorReadings = gatherSensorData(currentBot.x, currentBot.y);
+
+            const centerX = gameCanvas.width / 2;
+            const centerY = gameCanvas.height / 2;
+            const center = { x: centerX, y: centerY };
+            
+            let smoothFactor = 0.5; // Default roam smoothing
+            
+            // --- CENTERING/ROAMING FORCE (Mid-Box) ---
+            const IDEAL_MID_RADIUS = Math.min(gameCanvas.width, gameCanvas.height) * IDEAL_MID_RADIUS_PERCENT * 0.5;
+            const distToCenter = Math.sqrt((currentBot.x - center.x) ** 2 + (currentBot.y - center.y) ** 2);
+            
+            const dxCenter = center.x - currentBot.x;
+            const dyCenter = center.y - currentBot.y;
+            const angleToCenter = Math.atan2(dyCenter, dxCenter);
+            
+            const centerForceScale = Math.min(1, Math.abs(distToCenter - IDEAL_MID_RADIUS) / (IDEAL_MID_RADIUS * 0.5));
+            const centeringForceMagnitude = CENTERING_FORCE_MAGNITUDE * centerForceScale; 
+            
+            const centeringVX = Math.cos(angleToCenter) * centeringForceMagnitude;
+            const centeringVY = Math.sin(angleToCenter) * centeringForceMagnitude;
+            
+            const tangentialVX = -dyCenter;
+            const tangentialVY = dxCenter;
+            const tangentialMagnitude = Math.sqrt(tangentialVX * tangentialVX + tangentialVY * tangentialVY);
+            
+            let finalVX = centeringVX;
+            let finalVY = centeringVY;
+            
+            if (tangentialMagnitude > 0) {
+                 finalVX += (tangentialVX / tangentialMagnitude) * TANGENTIAL_ROAM_FORCE * centerForceScale;
+                 finalVY += (tangentialVY / tangentialMagnitude) * TANGENTIAL_ROAM_FORCE * centerForceScale;
+            }
+
+
+            // --- DYNAMIC SPEED CONTROL & PATH SCORING ---
+            
+            let maxPredictedDanger = 0;
+            let totalDangerSum = 0; 
+            let isEmergency = false;
+            let isEvasion = false;
+            
+            const initialCandidates = generateCandidateVelocities(currentBot.emergencyMaxSpeed, currentBot.vx, currentBot.vy);
+            let initialTestedPaths = [];
+
+            // Score with MAX_EMERGENCY_SPEED
+            for (const { vx: testVX, vy: testVY } of initialCandidates) {
+                 const result = scoreCandidatePath(currentBot.x, currentBot.y, testVX, testVY, currentBot.emergencyMaxSpeed, center, currentBot.sensorReadings);
+                 initialTestedPaths.push({
+                    score: result.score,
+                    vx: testVX,
+                    vy: testVY,
+                    path: result.path,
+                    proximityMarkers: result.proximityMarkers, // Renamed
+                    maxStepDangerScore: result.maxStepDangerScore,
+                    closestPredictedMiss: result.closestPredictedMiss,
+                    totalDangerScore: result.totalDangerScore,
+                    clearance: result.clearance // Stored clearance
+                });
+                totalDangerSum = Math.max(totalDangerSum, result.totalDangerScore);
+            }
+            
+            currentBot.totalDangerScore = totalDangerSum;
+            initialTestedPaths.sort((a, b) => a.score - b.score);
+            currentBot.topPaths = initialTestedPaths.slice(0, 5); // Store top paths for potential debug draw
+
+            let chosenPath = null;
+            let bestPathScore = Infinity;
+
+            if (initialTestedPaths.length > 0) {
+                chosenPath = initialTestedPaths[0];
+                bestPathScore = chosenPath.score;
+                maxPredictedDanger = chosenPath.maxStepDangerScore; 
+                currentBot.safeZoneClearance = chosenPath.clearance; // Update bot clearance
+
+                // --- A. IMMEDIATE EMERGENCY (FAST re FAST) ---
+                if (bestPathScore === Infinity || maxPredictedDanger > CRITICAL_DANGER_THRESHOLD || chosenPath.closestPredictedMiss < SAFETY_CUSHION / 2) {
+                    isEmergency = true;
+                    currentBot.currentMaxSpeed = currentBot.emergencyMaxSpeed;
+                    currentBot.speedMode = 'Emergency';
+                    smoothFactor = 1.0; 
+                } 
+                
+                // --- B. STRATEGIC EVASION CORE (Clump Detection - Retained for logic integrity) ---
+                else if (totalDangerSum > CONGESTION_THRESHOLD_SCORE) {
+                    isEvasion = true;
+                    currentBot.currentMaxSpeed = currentBot.emergencyMaxSpeed;
+                    currentBot.speedMode = 'Evasion';
+                    smoothFactor = 0.8; 
+                    currentBot.strategicTarget = { active: true, x: chosenPath.path[chosenPath.path.length-1].x, y: chosenPath.path[chosenPath.path.length-1].y };
+
+                } else {
+                    // C. DEFAULT / STRATEGIC ORBIT (Includes Clearance Priority)
+                    currentBot.strategicTarget = { active: false }; 
+                    currentBot.currentMaxSpeed = currentBot.baseMaxSpeed;
+                    currentBot.speedMode = 'Cruise';
+                    smoothFactor = 0.6; 
+                }
+                
+                currentBot.predictedPath = chosenPath.path;
+                currentBot.proximityMarkers = chosenPath.proximityMarkers; // Renamed
+                currentBot.closestPredictedMiss = chosenPath.closestPredictedMiss;
+                
+            } else {
+                // Default safe state
+                currentBot.strategicTarget = { active: false };
+                currentBot.clumpCenter = null;
+                currentBot.currentMaxSpeed = currentBot.baseMaxSpeed;
+                currentBot.speedMode = 'Strategic Roam';
+                currentBot.predictedPath = [];
+                currentBot.proximityMarkers = [];
+                currentBot.closestPredictedMiss = THREAT_HORIZON;
+                currentBot.safeZoneClearance = 0;
+            }
+
+            // --- 2. IDLE PREVENTION CHECK (Unchanged) ---
+            const currentSpeed = Math.sqrt(currentBot.vx * currentBot.vx + currentBot.vy * currentBot.vy);
+            const deltaTime = currentTime - lastUpdateTime;
+
+            if (currentSpeed < IDLE_THRESHOLD && !isEmergency && !isEvasion) {
+                currentBot.minimalMoveTimer += deltaTime;
+            } else {
+                currentBot.minimalMoveTimer = 0;
+            }
+
+            let forcedMove = false;
+            if (currentBot.minimalMoveTimer >= IDLE_LIMIT_MS) {
+                 const movingPath = initialTestedPaths.find(p => 
+                    Math.sqrt(p.vx * p.vx + p.vy * p.vy) > currentBot.baseMaxSpeed * 0.5 && p.score < Infinity
+                 );
+                 
+                 if (movingPath) {
+                      finalVX += movingPath.vx;
+                      finalVY += movingPath.vy;
+                      currentBot.minimalMoveTimer = 0; 
+                      forcedMove = true;
+                 }
+            }
+            
+            // --- 3. VECTOR BLENDING CORE (VBC) & PRIMARY AVOIDANCE ---
+            
+            if (!forcedMove && chosenPath && bestPathScore < Infinity) {
+                
+                let pathsToBlend = initialTestedPaths.filter(p => p.score < Infinity).slice(0, VECTOR_BLEND_COUNT);
+                
+                if (pathsToBlend.length > 0) {
+                    let totalInverseScore = 0;
+                    let blendedVX = 0;
+                    let blendedVY = 0;
+
+                    pathsToBlend.forEach(p => {
+                        const inverseScore = 1.0 / (p.score + 10); 
+                        totalInverseScore += inverseScore;
+                    });
+
+                    pathsToBlend.forEach(p => {
+                        const inverseScore = 1.0 / (p.score + 10);
+                        const weight = inverseScore / totalInverseScore;
+                        blendedVX += p.vx * weight;
+                        blendedVY += p.vy * weight;
+                    });
+                    
+                    finalVX = blendedVX; 
+                    finalVY = blendedVY;
+                }
+            }
+            
+            // --- 4. STRATEGIC ESCORT/ORBIT LOGIC (Safety Check is Crucial) ---
+            
+            let strategicVX = 0;
+            let strategicVY = 0;
+            let isStrategicMode = false;
+            
+            const isSafeToStrategize = chosenPath && chosenPath.closestPredictedMiss > STRATEGIC_SAFETY_THRESHOLD; 
+
+            if (isSafeToStrategize && !isEmergency && !isEvasion) {
+                
+                let closestBullet = null;
+                let minDistance = THREAT_HORIZON * 2;
+                
+                for (const bullet of bullets) {
+                    const dist = Math.sqrt((currentBot.x - bullet.x) ** 2 + (currentBot.y - bullet.y) ** 2);
+                    if (dist < minDistance && dist > currentBot.radius + bullet.radius + 10) { 
+                        minDistance = dist;
+                        closestBullet = bullet;
+                    }
+                }
+                currentBot.escortTarget = closestBullet;
+
+                if (currentBot.escortTarget) {
+                    const target = currentBot.escortTarget;
+                    const ORBIT_RADIUS = 100;
+                    const ESCORT_RANGE = 40; 
+                    
+                    const dx = target.x - currentBot.x;
+                    const dy = target.y - currentBot.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < ESCORT_RANGE) {
+                        // A. ESCORT MODE 
+                        strategicVX = target.vx;
+                        strategicVY = target.vy;
+                        
+                        const targetAngle = Math.atan2(dy, dx);
+                        const angleDeviated = targetAngle + Math.PI; 
+                        const pushFactor = (ESCORT_RANGE - distance) * 0.05; 
+                        
+                        strategicVX += Math.cos(angleDeviated) * pushFactor;
+                        strategicVY += Math.sin(angleDeviated) * pushFactor;
+                        
+                        currentBot.speedMode = 'Escort'; 
+                        isStrategicMode = true;
+                        
+                    } else if (distance < ORBIT_RADIUS) {
+                        // B. ORBIT MODE 
+                        const angleToTarget = Math.atan2(dy, dx);
+                        const angleError = (distance - ORBIT_RADIUS) * 0.005; 
+                        
+                        let vectorToTargetX = Math.cos(angleToTarget) * angleError;
+                        let vectorToTargetY = Math.sin(angleToTarget) * angleError;
+
+                        const perpDX = -dy;
+                        const perpDY = dx;
+                        const perpMagnitude = Math.sqrt(perpDX * perpDX + perpDY * perpDY);
+                        
+                        const orbitSpeed = 1.0; 
+                        if (perpMagnitude > 0) {
+                            strategicVX = orbitSpeed * (perpDX / perpMagnitude);
+                            strategicVY = orbitSpeed * (perpDY / perpMagnitude);
+                        }
+                        
+                        strategicVX += vectorToTargetX;
+                        strategicVY += vectorToTargetY;
+                        
+                        currentBot.speedMode = 'Orbit'; 
+                        isStrategicMode = true;
+                        
+                    } else if (distance < THREAT_HORIZON) {
+                        // C. APPROACH MODE 
+                        const angleToTarget = Math.atan2(dy, dx);
+                        const approachSpeed = currentBot.baseMaxSpeed * 0.5;
+                        strategicVX = Math.cos(angleToTarget) * approachSpeed;
+                        strategicVY = Math.sin(angleToTarget) * approachSpeed;
+                        currentBot.speedMode = 'Approach';
+                        isStrategicMode = true;
+                    }
+                }
+            } else {
+                 currentBot.escortTarget = null;
+                 if (!isEmergency && !isStrategicMode && !isEvasion) {
+                    currentBot.speedMode = 'Strategic Roam';
+                 }
+            }
+            
+            // --- 5. OUTPUT CONTROL ---
+            
+            if (isStrategicMode && !isEmergency && !isEvasion) {
+                 finalVX = strategicVX;
+                 finalVY = strategicVY;
+                 smoothFactor = 0.5; 
+            }
+            
+            // Re-clamp the final vector magnitude
+            const finalMagnitude = Math.sqrt(finalVX * finalVX + finalVY * finalVY);
+            if (finalMagnitude > currentBot.currentMaxSpeed) {
+                finalVX = (finalVX / finalMagnitude) * currentBot.currentMaxSpeed;
+                finalVY = (finalVY / finalMagnitude) * currentBot.currentMaxSpeed;
+            }
+            
+            // Velocity Smoothing
+            currentBot.vx = lerp(currentBot.vx, finalVX, smoothFactor);
+            currentBot.vy = lerp(currentBot.vy, finalVY, smoothFactor);
+            
+            // Proactive AA check
+            if (maxPredictedDanger > AA_PROACTIVE_SCORE_THRESHOLD) {
+                activateAntiAir(currentTime);
+            }
+            
+            // Update rotation
+            if (Math.abs(currentBot.vx) > 0.1 || Math.abs(currentBot.vy) > 0.1) {
+                currentBot.rotation = Math.atan2(currentBot.vy, currentBot.vx); 
+            } else {
+                currentBot.vx = 0;
+                currentBot.vy = 0;
+            }
+        }
+
+        function updateBot(currentTime) {
+            
+            adaptiveControlManager(bot, currentTime);
+            
+            // Movement application
+            bot.x += bot.vx;
+            bot.y += bot.vy;
+            
+            // Constant Visual Spin (Faster when in Emergency/Evasion Mode)
+            bot.visualRotation += (bot.speedMode === 'Emergency' || bot.speedMode === 'Evasion') ? 0.3 : 0.1;
+            if (bot.visualRotation > 2 * Math.PI) bot.visualRotation -= 2 * Math.PI;
+            
+            // AA Charge logic
+            if (bot.aaCharge < 100 && currentTime > bot.aaCooldown) {
+                bot.aaCharge = Math.min(100, bot.aaCharge + AA_CHARGE_RATE);
+            }
+            updateAAChargeUI();
+            updateSpeedModeUI();
+            
+            // Clamping (This is the final check, but the scoring should prevent reaching here)
+            bot.x = Math.max(bot.radius, Math.min(gameCanvas.width - bot.radius, bot.x));
+            bot.y = Math.max(bot.radius, Math.min(gameCanvas.height - bot.radius, bot.y));
+        }
+
+        // --- Bullet Logic (Unchanged) ---
+        
+        function calculateDifficultyFactor(timeElapsed) {
+            const timeInSeconds = timeElapsed;
+            
+            // Slower, more gentle scaling than previous versions
+            if (timeInSeconds < 10) {
+                return 1.0 + (timeInSeconds / 25.0); 
+            } else if (timeInSeconds < 40) {
+                return 1.4 + (timeInSeconds - 10) * 0.08; 
+            } else {
+                return 3.8 + (timeInSeconds - 40) * 0.1; 
+            }
+        }
+        
+        class Bullet {
+            constructor(speedFactor, initialX, initialY, angleRadians) {
+                this.size = 6 + Math.random() * 8; 
+                this.radius = this.size / 2;
+                
+                const baseSpeed = 2.0; 
+                const speed = baseSpeed + speedFactor * 0.8; 
+
+                if (initialX !== undefined) {
+                    this.x = initialX;
+                    this.y = initialY;
+                    this.vx = Math.cos(angleRadians) * speed;
+                    this.vy = Math.sin(angleRadians) * speed;
+                } else {
+                    const side = Math.floor(Math.random() * 4);
+                    let angle;
+                    
+                    if (side === 0) { 
+                        this.x = Math.random() * gameCanvas.width; this.y = -this.radius;
+                        angle = Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+                    } else if (side === 1) { 
+                        this.x = gameCanvas.width + this.radius; this.y = Math.random() * gameCanvas.height;
+                        angle = Math.PI + (Math.random() - 0.5) * 0.8;
+                    } else if (side === 2) { 
+                        this.x = Math.random() * gameCanvas.width; this.y = gameCanvas.height + this.radius;
+                        angle = 3 * Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+                    } else { 
+                        this.x = -this.radius; this.y = Math.random() * gameCanvas.height;
+                        angle = 0 + (Math.random() - 0.5) * 0.8;
+                    }
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                }
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+
+            draw() {
+                const gradient = gameCtx.createRadialGradient(
+                    this.x, this.y, this.radius * 0.2, 
+                    this.x, this.y, this.radius
+                );
+                gradient.addColorStop(0, 'rgba(255, 100, 100, 1.0)'); 
+                gradient.addColorStop(0.7, 'rgba(255, 0, 0, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 0, 0, 0.0)'); 
+
+                gameCtx.fillStyle = gradient;
+                gameCtx.beginPath();
+                gameCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                gameCtx.fill();
+            }
+
+            isOffScreen() {
+                return this.x < -this.size || this.x > gameCanvas.width + this.size ||
+                       this.y < -this.size || this.y > gameCanvas.height + this.size;
+            }
+        }
+        
+        // --- Pattern Generation System (Unchanged) ---
+
+        let patternBulletCount = 0;
+        let patternFireRate = 100;
+        let currentPatternType = '';
+        
+        function startNewPattern(timeElapsed) {
+            const patterns = ['WAVE', 'SPIRAL', 'CROSS', 'WALL'];
+            currentPatternType = patterns[Math.floor(Math.random() * patterns.length)];
+            isPatternActive = true;
+            patternBulletCount = 0;
+            patternFireRate = 100 - Math.min(60, calculateDifficultyFactor(timeElapsed) * 5); 
+            patternStartTime = performance.now();
+            lastBulletSpawnTime = performance.now();
+        }
+
+        function handlePattern(timeElapsed) {
+            if (performance.now() - patternStartTime >= PATTERN_DURATION) {
+                isPatternActive = false;
+                nextPatternTime = performance.now() + PATTERN_PAUSE + Math.random() * 2000;
+                return;
+            }
+            
+            if (performance.now() - lastBulletSpawnTime < patternFireRate) return;
+
+            const difficultyFactor = calculateDifficultyFactor(timeElapsed);
+            const center = { x: gameCanvas.width / 2, y: gameCanvas.height / 2 };
+            let bulletsToSpawn = [];
+            
+            const target = (gameMode === 'PLAYER') ? player : bot;
+            const targetAngle = Math.atan2(target.y - center.y, target.x - center.x);
+
+            if (currentPatternType === 'WAVE') {
+                const angleOffset = Math.sin(timeElapsed * 2) * 0.3;
+                for(let i = 0; i < 7; i++) {
+                    const angle = Math.PI / 4 + i * (Math.PI / 10) + angleOffset;
+                    bulletsToSpawn.push(new Bullet(difficultyFactor, -10, center.y, angle));
+                }
+            } else if (currentPatternType === 'SPIRAL') {
+                const angle = patternBulletCount * 0.2 + timeElapsed * 0.5;
+                for(let i = 0; i < 5; i++) {
+                     bulletsToSpawn.push(new Bullet(difficultyFactor, center.x, center.y, angle + i * (Math.PI / 2.5)));
+                }
+            } else if (currentPatternType === 'CROSS') {
+                const angleBase = patternBulletCount * 0.1;
+                for(let i = 0; i < 4; i++) {
+                     const angle = i * Math.PI / 2 + angleBase;
+                     bulletsToSpawn.push(new Bullet(difficultyFactor, center.x, center.y, angle));
+                }
+            } else if (currentPatternType === 'WALL') {
+                const wallWidth = 12;
+                const spread = Math.PI / 8;
+                for(let i = -wallWidth; i <= wallWidth; i++) {
+                     const angle = targetAngle + spread * (i / wallWidth) + (Math.random() * 0.05 - 0.025);
+                     bulletsToSpawn.push(new Bullet(difficultyFactor, center.x, center.y, angle));
+                }
+            }
+
+            bullets.push(...bulletsToSpawn);
+            patternBulletCount++;
+            lastBulletSpawnTime = performance.now(); 
+        }
+
+        function spawnBullets(currentTime, timeElapsed) {
+            const difficultyFactor = calculateDifficultyFactor(timeElapsed);
+            speedDisplay.textContent = `Difficulty: x${difficultyFactor.toFixed(1)}`;
+
+            if (isPatternActive) {
+                handlePattern(timeElapsed);
+                return difficultyFactor;
+            }
+
+            if (currentTime > nextPatternTime) {
+                startNewPattern(timeElapsed);
+                return difficultyFactor;
+            }
+
+            const baseInterval = 0.5; 
+            const intervalDecreaseRate = 0.08;
+            const spawnInterval = Math.max(0.02, baseInterval - (timeElapsed * intervalDecreaseRate));
+            
+            const spawnCount = 1 + Math.floor(Math.min(5, timeElapsed / 10)); 
+
+            if (currentTime - lastBulletSpawnTime > spawnInterval * 1000) {
+                for (let i = 0; i < spawnCount; i++) {
+                    bullets.push(new Bullet(difficultyFactor));
+                }
+                lastBulletSpawnTime = currentTime;
+            }
+            
+            return difficultyFactor;
+        }
+
+        // --- Drawing Functions ---
+        
+        function drawPentagon(ctx, x, y, radius, rotation, color, isHitbox) {
+            const sides = 5;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation); 
+            
+            if (!isHitbox) {
+                ctx.beginPath();
+                const currentRadius = radius; 
+                for (let i = 0; i < sides; i++) {
+                    const angle = i * (2 * Math.PI / sides); 
+                    const pointX = currentRadius * Math.cos(angle);
+                    const pointY = currentRadius * Math.sin(angle);
+                    if (i === 0) { ctx.moveTo(pointX, pointY); } else { ctx.lineTo(pointX, pointY); }
+                }
+                ctx.closePath();
+                ctx.fillStyle = color + '40';
+                ctx.fill();
+                 
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(currentRadius * 0.5, 0); 
+                ctx.lineTo(currentRadius * 1.5, 0); 
+                ctx.stroke();
+
+            } else {
+                 // Explicitly draw the actual COLLISION_RADIUS (3px) to show 'debugging'
+                 ctx.fillStyle = color;
+                 ctx.beginPath();
+                 ctx.arc(0, 0, radius, 0, Math.PI * 2); 
+                 ctx.fill();
+                 
+                 // Draw the smaller hitbox boundary for clarity
+                 ctx.strokeStyle = '#ff0000';
+                 ctx.lineWidth = 1;
+                 ctx.setLineDash([1, 1]);
+                 ctx.beginPath();
+                 ctx.arc(0, 0, radius + 1, 0, Math.PI * 2); 
+                 ctx.stroke();
+                 ctx.setLineDash([]);
+            }
+
+            ctx.restore();
+        }
+
+        function drawStars() {
+            gameCtx.fillStyle = 'white';
+            const width = gameCanvas.width;
+            const height = gameCanvas.height;
+
+            for (const star of stars) {
+                star.x += star.vx;
+                star.y += star.vy;
+                
+                if (star.x < 0) star.x += width;
+                if (star.x > width) star.x -= width;
+                if (star.y < 0) star.y += height;
+                if (star.y > height) star.y -= height;
+                
+                gameCtx.globalAlpha = star.opacity;
+                gameCtx.beginPath();
+                gameCtx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                gameCtx.fill();
+            }
+            gameCtx.globalAlpha = 1.0;
+        }
+        
+        function drawBotFOV() {
+            if (!gameMode.startsWith('BOT')) return;
+            
+            const centerX = gameCanvas.width / 2;
+            const centerY = gameCanvas.height / 2;
+            const currentTime = performance.now();
+            
+            let threatColor = '#00ffaa'; 
+            let pulseFactor = 0;
+            
+            if (bot.speedMode === 'Emergency' || bot.speedMode === 'Evasion') {
+                threatColor = '#ffc107'; 
+                pulseFactor = (Math.sin(currentTime / 30) + 1) / 2;
+            } else if (bot.closestPredictedMiss < LOW_THRESHOLD_SENSOR_DIST) {
+                threatColor = '#ff0000';
+            }
+
+
+            // --- 1. Draw 16-Axis Sonar/LiDAR Scan Lines & Sensor Hits ---
+            gameCtx.save();
+            gameCtx.translate(bot.x, bot.y);
+            gameCtx.rotate(bot.visualRotation * 0.5); 
+            
+            const maxRadarLength = THREAT_HORIZON + 50; 
+
+            bot.sensorReadings.forEach(reading => {
+                const angle = reading.angle - (bot.visualRotation * 0.5); 
+                
+                let sensorColor = (reading.type === 'FOV') ? threatColor : '#4f46e5'; 
+                let lineWidth = (reading.type === 'FOV') ? 0.5 + pulseFactor * 1.5 : 0.3;
+                let alpha = (reading.distance < maxRadarLength) ? 0.9 : 0.3;
+                
+                if (reading.distance < LOW_THRESHOLD_SENSOR_DIST && reading.type === 'FOV') {
+                    lineWidth = 2; 
+                }
+
+                gameCtx.strokeStyle = sensorColor;
+                gameCtx.lineWidth = lineWidth;
+                gameCtx.globalAlpha = alpha;
+                
+                gameCtx.beginPath();
+                gameCtx.moveTo(0, 0);
+                gameCtx.lineTo(Math.cos(angle) * maxRadarLength, Math.sin(angle) * maxRadarLength);
+                gameCtx.stroke();
+                
+                if (reading.distance < maxRadarLength) {
+                    gameCtx.beginPath();
+                    const markerX = Math.cos(angle) * reading.distance;
+                    const markerY = Math.sin(angle) * reading.distance;
+                    const markerSize = (reading.distance < LOW_THRESHOLD_SENSOR_DIST) ? 4 : 2;
+                    
+                    gameCtx.arc(markerX, markerY, markerSize, 0, Math.PI * 2);
+                    gameCtx.fillStyle = sensorColor;
+                    gameCtx.fill();
+                }
+            });
+
+            gameCtx.restore();
+            gameCtx.globalAlpha = 1.0;
+            
+            // --- 2. Draw Strategic Orbit / Gravity Well Target (Mid-Box Center) ---
+            const IDEAL_MID_RADIUS = Math.min(gameCanvas.width, gameCanvas.height) * IDEAL_MID_RADIUS_PERCENT * 0.5;
+            const aaNeed = Math.min(1, 1 - (bot.aaCharge / 100));
+            const r = Math.floor(aaNeed * 255);
+            const g = Math.floor((1 - aaNeed) * 200 + 50);
+            const b = 255 - r;
+            
+            gameCtx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.8)`; 
+            gameCtx.lineWidth = 2;
+            gameCtx.setLineDash([5, 5]);
+            gameCtx.beginPath();
+            gameCtx.arc(centerX, centerY, IDEAL_MID_RADIUS, 0, Math.PI * 2);
+            gameCtx.stroke();
+            gameCtx.setLineDash([]); 
+            
+            gameCtx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`; 
+            gameCtx.beginPath();
+            gameCtx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+            gameCtx.fill();
+
+            // --- 3. Draw Mid-Box Boundary Avoidance Zone ---
+            gameCtx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
+            gameCtx.lineWidth = 1;
+            gameCtx.setLineDash([2, 2]);
+            gameCtx.strokeRect(MIN_DISTANCE_FROM_WALL, MIN_DISTANCE_FROM_WALL, gameCanvas.width - 2 * MIN_DISTANCE_FROM_WALL, gameCanvas.height - 2 * MIN_DISTANCE_FROM_WALL);
+            gameCtx.setLineDash([]); 
+        }
+        
+        function drawPredictedPath() {
+            if (!gameMode.startsWith('BOT')) return;
+            
+            // 1. Draw the absolute BEST PATH (The actual choice - Marked)
+            const bestPath = bot.predictedPath;
+            if (bestPath.length >= 2) {
+                gameCtx.lineWidth = 5; 
+                gameCtx.lineCap = 'round';
+                gameCtx.lineJoin = 'round';
+                
+                for (let i = 0; i < bestPath.length - 1; i++) {
+                    const p1 = bestPath[i];
+                    const p2 = bestPath[i + 1];
+                    
+                    const normalizedStep = i / PREDICTION_STEPS;
+                    const alpha = Math.max(0.7, 1 - normalizedStep * 0.4); 
+                    
+                    let pathColor = '#00ffaa'; 
+                    if (bot.speedMode === 'Emergency') {
+                         pathColor = '#ffc107'; 
+                    } else if (bot.speedMode === 'Evasion') {
+                         pathColor = '#f43f5e'; // Pink for Evasion path
+                    } else if (bot.closestPredictedMiss < SAFETY_CUSHION) {
+                        pathColor = '#ff9800';
+                    }
+                    
+                    gameCtx.strokeStyle = pathColor + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                    gameCtx.beginPath();
+                    gameCtx.moveTo(p1.x, p1.y);
+                    gameCtx.lineTo(p2.x, p2.y);
+                    gameCtx.stroke();
+                }
+            }
+
+            // --- SafeZone Clearance Visualization ---
+            if (bot.safeZoneClearance > 50 && bot.predictedPath.length > 0) {
+                const endPoint = bot.predictedPath[bot.predictedPath.length - 1];
+                const radius = Math.min(FINAL_CLEARANCE_RADIUS * 1.5, bot.safeZoneClearance);
+                
+                // Draw the clearance bubble
+                gameCtx.strokeStyle = 'rgba(0, 255, 170, 0.5)'; // Cyan/Teal
+                gameCtx.lineWidth = 2;
+                gameCtx.setLineDash([3, 10]);
+                gameCtx.beginPath();
+                gameCtx.arc(endPoint.x, endPoint.y, radius, 0, Math.PI * 2);
+                gameCtx.stroke();
+                gameCtx.setLineDash([]);
+                
+                // Mark the SafeZone Target
+                gameCtx.fillStyle = 'rgba(0, 255, 170, 1.0)';
+                gameCtx.beginPath();
+                gameCtx.arc(endPoint.x, endPoint.y, 8, 0, Math.PI * 2);
+                gameCtx.fill();
+            }
+
+            // --- Proximity Markers ---
+            gameCtx.fillStyle = 'rgba(255, 0, 255, 0.6)'; // Hot Pink / Magenta for Proximity
+            bot.proximityMarkers.slice(0, 50).forEach(marker => { 
+                gameCtx.beginPath();
+                gameCtx.arc(marker.x, marker.y, 5, 0, Math.PI * 2); 
+                gameCtx.fill();
+            });
+
+            // --- Other Strategic Markers ---
+
+            // 3. Draw Strategic Evasion Target 
+            if (bot.strategicTarget && bot.strategicTarget.active) {
+                const target = bot.strategicTarget;
+                
+                // Target Destination (Evasion Target)
+                gameCtx.strokeStyle = '#f43f5e'; 
+                gameCtx.lineWidth = 3;
+                gameCtx.setLineDash([8, 3]);
+                gameCtx.beginPath();
+                gameCtx.arc(target.x, target.y, 20, 0, Math.PI * 2);
+                gameCtx.stroke();
+                gameCtx.setLineDash([]);
+                
+                // Line to Target
+                gameCtx.strokeStyle = 'rgba(244, 63, 94, 0.5)';
+                gameCtx.lineWidth = 2;
+                gameCtx.beginPath();
+                gameCtx.moveTo(bot.x, bot.y);
+                gameCtx.lineTo(target.x, target.y);
+                gameCtx.stroke();
+            }
+
+
+            // 4. Draw Escort/Orbit Target
+            if (bot.escortTarget) {
+                 const target = bot.escortTarget;
+                 const ORBIT_RADIUS = 100;
+
+                 // Draw Orbit Guide
+                 gameCtx.strokeStyle = 'rgba(79, 70, 229, 0.5)';
+                 gameCtx.lineWidth = 1;
+                 gameCtx.setLineDash([2, 4]);
+                 gameCtx.beginPath();
+                 gameCtx.arc(target.x, target.y, ORBIT_RADIUS, 0, Math.PI * 2);
+                 gameCtx.stroke();
+
+                 // Draw Escort Zone
+                 gameCtx.setLineDash([]);
+                 gameCtx.strokeStyle = '#1d4ed8'; 
+                 gameCtx.lineWidth = 2;
+                 gameCtx.beginPath();
+                 gameCtx.arc(target.x, target.y, 40, 0, Math.PI * 2);
+                 gameCtx.stroke();
+
+                 // Draw Target Center
+                 gameCtx.fillStyle = '#1d4ed8';
+                 gameCtx.beginPath();
+                 gameCtx.arc(target.x, target.y, 5, 0, Math.PI * 2);
+                 gameCtx.fill();
+            }
+            gameCtx.setLineDash([]); 
+        }
+        
+        function drawGamePath() {
+             if (gameMode !== 'PLAYER') return;
+
+            gameCtx.strokeStyle = PATH_COLOR + '80'; 
+            gameCtx.lineWidth = 4;
+            gameCtx.lineCap = 'round';
+            gameCtx.lineJoin = 'round';
+            
+            if (playerPath.length > 0) {
+                gameCtx.beginPath();
+                gameCtx.moveTo(player.x, player.y);
+                for(let i = 0; i < playerPath.length; i++) {
+                    gameCtx.lineTo(playerPath[i].x, playerPath[i].y);
+                }
+                gameCtx.stroke();
+            }
+        }
+
+
+        function drawControlCanvas() {
+            controlCtx.clearRect(0, 0, controlCanvas.width, controlCtx.height);
+            
+            if (drawnPath.length === 0) return;
+
+            controlCtx.strokeStyle = PATH_COLOR;
+            controlCtx.lineWidth = 5; 
+            controlCtx.lineCap = 'round';
+            controlCtx.lineJoin = 'round';
+            
+            controlCtx.beginPath();
+            controlCtx.moveTo(drawnPath[0].x, drawnPath[0].y); 
+
+            for(let i = 1; i < drawnPath.length; i++) {
+                controlCtx.lineTo(drawnPath[i].x, drawnPath[i].y);
+            }
+            
+            controlCtx.stroke();
+            
+            if (isDrawing) {
+                requestAnimationFrame(drawControlCanvas);
+            }
+        }
+
+        function drawGameCanvas() {
+            gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+            
+            drawStars();
+            
+            let currentEntity = (gameMode === 'PLAYER') ? player : bot;
+            
+            if (gameMode.startsWith('BOT')) {
+                drawBotFOV(); 
+                drawPredictedPath(); 
+            }
+            
+            bullets.forEach(bullet => bullet.draw());
+            
+            const drawRotation = (currentEntity === bot) ? bot.visualRotation : currentEntity.rotation;
+            
+            drawPentagon(
+                gameCtx, 
+                currentEntity.x, 
+                currentEntity.y, 
+                currentEntity.drawRadius, 
+                drawRotation, 
+                currentEntity.color, 
+                false 
+            );
+
+            drawPentagon(
+                gameCtx, 
+                currentEntity.x, 
+                currentEntity.y, 
+                currentEntity.radius, 
+                drawRotation, 
+                currentEntity.color, 
+                true 
+            );
+            
+            drawGamePath(); 
+        }
+
+        function updatePlayer() {
+            let dx = 0;
+            let dy = 0;
+
+            if (playerPath.length > 0) {
+                const target = playerPath[0];
+                dx = target.x - player.x;
+                dy = target.y - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < player.speed) {
+                    player.x = target.x;
+                    player.y = target.y;
+                    playerPath.shift();
+                } else {
+                    const angle = Math.atan2(dy, dx);
+                    player.x += Math.cos(angle) * player.speed;
+                    player.y += Math.sin(angle) * player.speed;
+                }
+            }
+            
+            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                player.rotation = Math.atan2(dy, dx); 
+            }
+            
+            player.x = Math.max(player.radius, Math.min(gameCanvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(gameCanvas.height - player.radius, player.y));
+        }
+
+        // --- Main Loop ---
+
+        function gameLoop(currentTime) {
+            if (!gameRunning) return;
+
+            const timeElapsed = (currentTime - startTime) / 1000;
+            scoreDisplay.textContent = `Time: ${timeElapsed.toFixed(2)}s`;
+
+            spawnBullets(currentTime, timeElapsed);
+            
+            if (gameMode === 'PLAYER') {
+                updatePlayer();
+            } else if (gameMode.startsWith('BOT')) {
+                updateBot(currentTime); 
+            }
+            
+            bullets.forEach(bullet => bullet.update());
+            bullets = bullets.filter(bullet => !bullet.isOffScreen());
+            
+            if (checkCollision()) {
+                gameOver(timeElapsed);
+                return;
+            }
+
+            drawGameCanvas();
+            
+            // Update global time tracker for delta calculation
+            lastUpdateTime = currentTime; 
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver(finalTime) {
+            gameRunning = false;
+            // FIX: Ensure the loop is completely canceled and the ID is reset
+            cancelAnimationFrame(animationFrameId); 
+            animationFrameId = null;
+            
+            modal.classList.remove('hidden');
+            finalScoreDisplay.textContent = `${finalTime.toFixed(2)} seconds`;
+        }
+
+        // --- Initializers ---
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            initGame();
+        });
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (gameRunning) {
+                drawGameCanvas();
+            }
+            if (!gameMode.startsWith('BOT')) {
+                 drawControlCanvas();
+            }
+        });
+    </script>
+</body>
+</html>
